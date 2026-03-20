@@ -88,6 +88,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   bool? _isPeerOnline;
   DateTime? _lastSeenAt;
   int? _lastSyncedMessageId;
+  bool _didInitialAutoScroll = false;
 
   @override
   void initState() {
@@ -147,6 +148,13 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
       return;
     }
 
+    if (!_didInitialAutoScroll) {
+      _didInitialAutoScroll = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom(animated: false);
+      });
+    }
+
     final latestId = messages.last.id;
     if (latestId == null || latestId == _lastSyncedMessageId) {
       return;
@@ -154,6 +162,24 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
 
     _lastSyncedMessageId = latestId;
     _scheduleReadSync();
+  }
+
+  void _scrollToBottom({required bool animated}) {
+    if (!mounted || !_scrollController.hasClients) {
+      return;
+    }
+
+    final target = _scrollController.position.maxScrollExtent;
+    if (animated) {
+      _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+      return;
+    }
+
+    _scrollController.jumpTo(target);
   }
 
   void _scheduleReadSync() {
@@ -426,13 +452,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
     });
 
     await Future.delayed(const Duration(milliseconds: 150));
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
-    }
+    _scrollToBottom(animated: true);
   }
 
   void _confirmRecall(int messageId) {
