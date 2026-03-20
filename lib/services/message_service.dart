@@ -1,0 +1,137 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+
+import '../models/message_receive_model.dart';
+import 'api_client.dart';
+
+class MessageService {
+  const MessageService(this._apiClient);
+
+  final ApiClient _apiClient;
+
+  Future<List<MessageReceiveModel>> listMessages({
+    required int roomId,
+    int page = 1,
+  }) async {
+    final response = await _apiClient.get(
+      '/api/v1/messages/',
+      query: {
+        'room': roomId,
+        'page': page,
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Load messages failed: ${response.body}');
+    }
+
+    final body = jsonDecode(utf8.decode(response.bodyBytes)) as List<dynamic>;
+    return body
+        .whereType<Map<String, dynamic>>()
+        .map(MessageReceiveModel.fromJson)
+        .toList();
+  }
+
+  Future<void> sendMessage({
+    required int roomId,
+    required String text,
+    int? replyTo,
+    List<XFile> attachments = const [],
+  }) async {
+    final files = <http.MultipartFile>[];
+    for (final file in attachments) {
+      final bytes = await file.readAsBytes();
+      files.add(
+        http.MultipartFile.fromBytes(
+          'attachments',
+          bytes,
+          filename: file.name.isEmpty ? 'upload.bin' : file.name,
+        ),
+      );
+    }
+
+    final response = await _apiClient.postMultipart(
+      '/api/v1/messages/',
+      query: {'room': roomId},
+      fields: {
+        if (text.trim().isNotEmpty) 'message': text.trim(),
+        if (replyTo != null) 'replyTo': replyTo.toString(),
+      },
+      files: files,
+    );
+
+    if (response.statusCode != 201) {
+      final body = await response.stream.bytesToString();
+      throw Exception('Send message failed: $body');
+    }
+  }
+
+  Future<void> changeMessage({
+    required int messageId,
+    required String text,
+    int? replyTo,
+    List<XFile> attachments = const [],
+  }) async {
+    final files = <http.MultipartFile>[];
+    for (final file in attachments) {
+      final bytes = await file.readAsBytes();
+      files.add(
+        http.MultipartFile.fromBytes(
+          'attachments',
+          bytes,
+          filename: file.name.isEmpty ? 'upload.bin' : file.name,
+        ),
+      );
+    }
+
+    final response = await _apiClient.putMultipart(
+      '/api/v1/messages/$messageId',
+      fields: {
+        if (text.trim().isNotEmpty) 'message': text.trim(),
+        if (replyTo != null) 'replyTo': replyTo.toString(),
+      },
+      files: files,
+    );
+
+    if (response.statusCode != 204) {
+      final body = await response.stream.bytesToString();
+      throw Exception('Update message failed: $body');
+    }
+  }
+
+  Future<void> recallMessage(int messageId) async {
+    final response = await _apiClient.delete('/api/v1/messages/$messageId');
+    if (response.statusCode != 204) {
+      throw Exception('Recall message failed: ${response.body}');
+    }
+  }
+
+  Future<void> setTypingStatus({
+    required int roomId,
+    required bool typing,
+  }) async {
+    final response = await _apiClient.postJson(
+      '/api/v1/messages/typing',
+      {'typing': typing},
+      query: {'room': roomId},
+    );
+
+    if (response.statusCode != 204) {
+      throw Exception('Set typing status failed: ${response.body}');
+    }
+  }
+
+  Future<void> setReadStatus({required int roomId}) async {
+    final response = await _apiClient.postJson(
+      '/api/v1/messages/read',
+      const {},
+      query: {'room': roomId},
+    );
+
+    if (response.statusCode != 204) {
+      throw Exception('Set read status failed: ${response.body}');
+    }
+  }
+}
