@@ -120,42 +120,44 @@ class MessageBubble extends StatelessWidget {
             const SizedBox(width: 4),
           ],
           Flexible(
-            child: Column(
-              crossAxisAlignment:
-                  isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              children: [
-                if (!isMine && showSenderName)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 14, right: 14, bottom: 4),
-                    child: Text(
-                      senderLabel,
-                      style: const TextStyle(
-                        color: Color(0xFF1F2937),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.1,
+            child: Padding(
+              padding: EdgeInsets.only(top: topSpacing),
+              child: Column(
+                crossAxisAlignment:
+                    isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  if (!isMine && showSenderName)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 14, right: 14, bottom: 1),
+                      child: Text(
+                        senderLabel,
+                        style: const TextStyle(
+                          color: Color(0xFF1F2937),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.1,
+                        ),
                       ),
                     ),
-                  ),
-                GestureDetector(
-                  onLongPress: onLongPress,
-                  child: Container(
-                    margin: EdgeInsets.fromLTRB(10, topSpacing, 10, 3),
-                    constraints: const BoxConstraints(maxWidth: 280),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: isMine ? const Color(0xFF168AFF) : const Color(0xFFE8EBEF),
-                      borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(18),
-                        topRight: const Radius.circular(18),
-                        bottomLeft: Radius.circular(isMine ? 18 : 6),
-                        bottomRight: Radius.circular(isMine ? 6 : 18),
+                  GestureDetector(
+                    onLongPress: onLongPress,
+                    child: Container(
+                      margin: const EdgeInsets.fromLTRB(10, 0, 10, 3),
+                      constraints: const BoxConstraints(maxWidth: 280),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isMine ? const Color(0xFF168AFF) : const Color(0xFFE8EBEF),
+                        borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(18),
+                          topRight: const Radius.circular(18),
+                          bottomLeft: Radius.circular(isMine ? 18 : 6),
+                          bottomRight: Radius.circular(isMine ? 6 : 18),
+                        ),
                       ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment:
-                          isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                      children: [
+                      child: Column(
+                        crossAxisAlignment:
+                            isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                        children: [
                         if (imageUrls.isNotEmpty)
                           ...imageUrls.map(
                             (url) => Padding(
@@ -216,62 +218,63 @@ class MessageBubble extends StatelessWidget {
                             ),
                           ),
                         ],
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                if (showReadReceipt)
-                  Container(
-                    margin: const EdgeInsets.only(right: 14, top: 1),
-                    child: seenByAvatars.isNotEmpty
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              for (final viewer in seenByAvatars.take(5))
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 2),
-                                  child: Tooltip(
-                                    message: _seenTooltip(viewer),
-                                    waitDuration: const Duration(milliseconds: 180),
-                                    child: AppAvatar(
-                                      url: viewer.user.avatar?.source,
-                                      name: viewer.user.displayLabel,
-                                      radius: 8,
+                  if (showReadReceipt)
+                    Container(
+                      margin: const EdgeInsets.only(right: 14, top: 1),
+                      child: seenByAvatars.isNotEmpty
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (final viewer in seenByAvatars.take(5))
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 2),
+                                    child: Tooltip(
+                                      message: _seenTooltip(viewer),
+                                      waitDuration: const Duration(milliseconds: 180),
+                                      child: AppAvatar(
+                                        url: viewer.user.avatar?.source,
+                                        name: viewer.user.displayLabel,
+                                        radius: 8,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              if (seenByAvatars.length == 1) ...[
-                                const SizedBox(width: 6),
-                                Text(
-                                  '\u0110\u00e3 xem',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                    fontSize: 11,
+                                if (seenByAvatars.length == 1) ...[
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '\u0110\u00e3 xem',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 11,
+                                    ),
                                   ),
-                                ),
-                              ],
-                              if (seenByAvatars.length > 5) ...[
-                                const SizedBox(width: 4),
-                                Text(
-                                  '+${seenByAvatars.length - 5}',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
+                                ],
+                                if (seenByAvatars.length > 5) ...[
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '+${seenByAvatars.length - 5}',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
-                                ),
+                                ],
                               ],
-                            ],
-                          )
-                        : Text(
-                            deliveryStatus ?? '',
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 11,
+                            )
+                          : Text(
+                              deliveryStatus ?? '',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 11,
+                              ),
                             ),
-                          ),
-                  ),
-              ],
+                    ),
+                ],
+              ),
             ),
           ),
         ],

@@ -806,9 +806,12 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                           : '';
                       final isStartSenderBlock = senderUsername != previousSender;
                       final isEndSenderBlock = senderUsername != nextSender;
+                      const firstMessageGap = 4.0;
+                      const differentSenderGap = 18.0;
+                      const sameSenderGap = 1.0;
                       final bubbleTopSpacing = isStartSenderBlock
-                          ? (index == 0 ? 4.0 : 14.0)
-                          : 3.0;
+                          ? (index == 0 ? firstMessageGap : differentSenderGap)
+                          : sameSenderGap;
 
                       final seenByAvatars = isMine
                           ? (seenByAvatarsByIndex[index] ?? const <SeenAvatarInfo>[])
