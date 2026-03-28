@@ -41,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final invitationProvider = context.read<InvitationProvider>();
       _invitationProvider = invitationProvider;
+      invitationProvider.setInvitesViewActive(_tabIndex == 2);
       invitationProvider.startRealtime();
       invitationProvider.loadInvitations();
 
@@ -76,7 +77,8 @@ class _HomeScreenState extends State<HomeScreen> {
           );
       });
 
-      _profileSub = context.read<RealtimeService>().profileStream.listen((profile) {
+      _profileSub =
+          context.read<RealtimeService>().profileStream.listen((profile) {
         if (!mounted) {
           return;
         }
@@ -91,6 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _invitationProvider?.setInvitesViewActive(false);
     _invitationNotificationSub?.cancel();
     _profileSub?.cancel();
     _invitationProvider?.stopRealtime();
@@ -147,6 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tabIndex,
         onDestinationSelected: (index) {
+          _invitationProvider?.setInvitesViewActive(index == 2);
           setState(() => _tabIndex = index);
         },
         destinations: [

@@ -221,6 +221,36 @@ class GroupMembersAddedEvent {
   }
 }
 
+class GroupAddedEvent {
+  const GroupAddedEvent({
+    required this.roomId,
+    required this.roomName,
+    required this.addedBy,
+  });
+
+  final int? roomId;
+  final String? roomName;
+  final String? addedBy;
+
+  factory GroupAddedEvent.fromJson(Map<String, dynamic> json) {
+    int? parseInt(dynamic value) {
+      if (value is int) {
+        return value;
+      }
+      return int.tryParse(value?.toString() ?? '');
+    }
+
+    final rawRoomName = json['roomName']?.toString().trim();
+    final rawAddedBy = json['addedBy']?.toString().trim();
+
+    return GroupAddedEvent(
+      roomId: parseInt(json['roomId']),
+      roomName: rawRoomName == null || rawRoomName.isEmpty ? null : rawRoomName,
+      addedBy: rawAddedBy == null || rawAddedBy.isEmpty ? null : rawAddedBy,
+    );
+  }
+}
+
 class PresenceUpdateEvent {
   const PresenceUpdateEvent({required this.presence});
 
@@ -307,6 +337,8 @@ class RealtimeService {
       StreamController<GroupMemberRemovedEvent>.broadcast();
   final StreamController<GroupMembersAddedEvent> _groupMembersAddedController =
       StreamController<GroupMembersAddedEvent>.broadcast();
+  final StreamController<GroupAddedEvent> _groupAddedController =
+      StreamController<GroupAddedEvent>.broadcast();
   final StreamController<PresenceUpdateEvent> _presenceController =
       StreamController<PresenceUpdateEvent>.broadcast();
   final StreamController<UserWithAvatarModel> _profileController =
@@ -336,6 +368,7 @@ class RealtimeService {
       _groupMemberRemovedController.stream;
   Stream<GroupMembersAddedEvent> get groupMembersAddedStream =>
       _groupMembersAddedController.stream;
+  Stream<GroupAddedEvent> get groupAddedStream => _groupAddedController.stream;
 
   Stream<PresenceUpdateEvent> get presenceStream => _presenceController.stream;
   Stream<UserWithAvatarModel> get profileStream => _profileController.stream;
@@ -422,6 +455,7 @@ class RealtimeService {
           _subscribeGroupUpdated();
           _subscribeChatRoomPinned();
           _subscribeGroupMembersAdded();
+          _subscribeGroupAdded();
           _subscribeGroupMemberRemoved();
           _subscribePresence();
           _subscribeProfileUpdates();
@@ -478,6 +512,7 @@ class RealtimeService {
     _chatRoomPinnedController.close();
     _groupMemberRemovedController.close();
     _groupMembersAddedController.close();
+    _groupAddedController.close();
     _presenceController.close();
     _profileController.close();
     _blockStatusController.close();
@@ -703,6 +738,25 @@ class RealtimeService {
         _groupMembersAddedController.add(
           GroupMembersAddedEvent.fromJson(decoded),
         );
+      },
+    );
+  }
+
+  void _subscribeGroupAdded() {
+    _client?.subscribe(
+      destination: '/user/queue/groups/added/',
+      callback: (frame) {
+        final body = frame.body;
+        if (body == null || body.isEmpty) {
+          return;
+        }
+
+        final decoded = jsonDecode(body);
+        if (decoded is! Map<String, dynamic>) {
+          return;
+        }
+
+        _groupAddedController.add(GroupAddedEvent.fromJson(decoded));
       },
     );
   }

@@ -40,7 +40,8 @@ class _PeopleScreenState extends State<PeopleScreen> {
       builder: (context) {
         return AlertDialog(
           title: const Text('Remove friend'),
-          content: const Text('This will remove this friend and chat room. Continue?'),
+          content: const Text(
+              'This will remove this friend and chat room. Continue?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -305,10 +306,30 @@ class _PeopleScreenState extends State<PeopleScreen> {
     final provider = context.watch<UserSearchProvider>();
     final roomsProvider = context.watch<ChatRoomsProvider>();
     final currentUsername = context.watch<AuthProvider>().username;
+    final normalizedQuery = _searchController.text.trim().toLowerCase();
 
     final friends = roomsProvider.rooms
         .where((room) => room.type == ChatRoomType.duo)
-        .toList();
+        .where((room) {
+      if (normalizedQuery.isEmpty) {
+        return true;
+      }
+
+      final friendName = room.displayNameFor(currentUsername).toLowerCase();
+      if (friendName.contains(normalizedQuery)) {
+        return true;
+      }
+
+      final friendUsername =
+          (room.duoPeerFor(currentUsername) ?? '').toLowerCase();
+      if (friendUsername.contains(normalizedQuery)) {
+        return true;
+      }
+
+      final latestPreview =
+          room.latestPreviewFor(currentUsername).toLowerCase();
+      return latestPreview.contains(normalizedQuery);
+    }).toList();
 
     return Column(
       children: [
@@ -318,17 +339,16 @@ class _PeopleScreenState extends State<PeopleScreen> {
             controller: _searchController,
             onChanged: _onSearchChanged,
             decoration: const InputDecoration(
-              hintText: 'Search username',
+              hintText: 'Search users and friends',
               prefixIcon: Icon(Icons.search),
             ),
           ),
         ),
-        if (provider.isLoading)
-          const LinearProgressIndicator(minHeight: 2),
+        if (provider.isLoading) const LinearProgressIndicator(minHeight: 2),
         Expanded(
           child: ListView(
             children: [
-              if (friends.isNotEmpty) ...[
+              if (friends.isNotEmpty || normalizedQuery.isNotEmpty) ...[
                 const Padding(
                   padding: EdgeInsets.fromLTRB(14, 6, 14, 6),
                   child: Text(
@@ -378,13 +398,22 @@ class _PeopleScreenState extends State<PeopleScreen> {
                         ),
                         PopupMenuItem<String>(
                           value: isBlocked ? 'unblock' : 'block',
-                          child: Text(isBlocked ? 'Unblock user' : 'Block user'),
+                          child:
+                              Text(isBlocked ? 'Unblock user' : 'Block user'),
                         ),
                       ],
                       icon: const Icon(Icons.more_vert),
                     ),
                   );
                 }),
+                if (friends.isEmpty && normalizedQuery.isNotEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text(
+                      'No friends match this search.',
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  ),
                 const Divider(height: 24),
               ],
               if (_isLoadingBlocked)
@@ -419,11 +448,19 @@ class _PeopleScreenState extends State<PeopleScreen> {
                   ),
                 ),
               ),
-              if (provider.users.isEmpty)
+              if (normalizedQuery.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 26),
                   child: Center(
-                    child: Text('Find users by username'),
+                    child: Text('Type to search users, friends, and chats'),
+                  ),
+                )
+              else if (!provider.isLoading && provider.users.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 26),
+                  child: Center(
+                    child: Text(
+                        'No users found for "${_searchController.text.trim()}".'),
                   ),
                 )
               else

@@ -17,6 +17,8 @@ class ChatListScreen extends StatefulWidget {
 class _ChatListScreenState extends State<ChatListScreen> {
   ChatRoomsProvider? _provider;
   bool _isNoticeCallbackScheduled = false;
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -31,6 +33,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   @override
   void dispose() {
+    _searchController.dispose();
     _provider?.stopRealtime();
     super.dispose();
   }
@@ -41,10 +44,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
     final currentUsername = context.watch<AuthProvider>().username;
     provider.setCurrentUsername(currentUsername);
     _showPendingSystemNotice(provider);
+    final filteredRooms = _filterRooms(
+      provider.rooms,
+      currentUsername: currentUsername,
+    );
     final pinnedRooms =
-        provider.rooms.where((room) => provider.isPinned(room.id)).toList();
+        filteredRooms.where((room) => provider.isPinned(room.id)).toList();
     final regularRooms =
-        provider.rooms.where((room) => !provider.isPinned(room.id)).toList();
+        filteredRooms.where((room) => !provider.isPinned(room.id)).toList();
+    final hasSearchQuery = _searchQuery.trim().isNotEmpty;
 
     if (provider.isLoading && provider.rooms.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -77,25 +85,44 @@ class _ChatListScreenState extends State<ChatListScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: TextField(
-              readOnly: true,
+              controller: _searchController,
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                });
+              },
               decoration: InputDecoration(
                 hintText: 'Search in chats',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: IconButton(
-                  onPressed: provider.loadRooms,
-                  icon: const Icon(Icons.refresh),
+                  onPressed: () {
+                    if (hasSearchQuery) {
+                      _searchController.clear();
+                      setState(() {
+                        _searchQuery = '';
+                      });
+                      return;
+                    }
+
+                    provider.loadRooms();
+                  },
+                  icon: Icon(
+                    hasSearchQuery ? Icons.close_rounded : Icons.refresh,
+                  ),
                 ),
               ),
             ),
           ),
           const SizedBox(height: 8),
-          if (provider.rooms.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          if (filteredRooms.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               child: Text(
-                'No conversations yet.',
+                hasSearchQuery
+                    ? 'No conversations found for "${_searchQuery.trim()}".'
+                    : 'No conversations yet.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.black54),
+                style: const TextStyle(color: Colors.black54),
               ),
             ),
           if (pinnedRooms.isNotEmpty)
@@ -171,6 +198,39 @@ class _ChatListScreenState extends State<ChatListScreen> {
         isPinned: isPinned,
       ),
     );
+  }
+
+  List<ChatRoomModel> _filterRooms(
+    List<ChatRoomModel> rooms, {
+    required String? currentUsername,
+  }) {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) {
+      return rooms;
+    }
+
+    return rooms.where((room) {
+      final roomName = room.displayNameFor(currentUsername).toLowerCase();
+      if (roomName.contains(query)) {
+        return true;
+      }
+
+      final peerUsername =
+          (room.duoPeerFor(currentUsername) ?? '').toLowerCase();
+      if (peerUsername.contains(query)) {
+        return true;
+      }
+
+      final latestPreview =
+          room.latestPreviewFor(currentUsername).toLowerCase();
+      if (latestPreview.contains(query)) {
+        return true;
+      }
+
+      return room.membersUsername.any(
+        (username) => username.toLowerCase().contains(query),
+      );
+    }).toList();
   }
 
   Future<void> _showRoomActions({

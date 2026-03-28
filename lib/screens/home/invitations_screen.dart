@@ -52,91 +52,154 @@ class _InvitationsScreenState extends State<InvitationsScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<InvitationProvider>();
+    final groupAddedNotifications = provider.groupAddedNotifications;
+    final hasInvites = provider.items.isNotEmpty;
+    final hasGroupNotices = groupAddedNotifications.isNotEmpty;
 
-    if (provider.isLoading && provider.items.isEmpty) {
+    if (provider.isLoading && !hasInvites && !hasGroupNotices) {
       return const Center(child: CircularProgressIndicator());
     }
 
     return RefreshIndicator(
       onRefresh: provider.loadInvitations,
-      child: provider.items.isEmpty
+      child: (!hasInvites && !hasGroupNotices)
           ? ListView(
               children: const [
                 SizedBox(height: 120),
-                Center(child: Text('No invitations')),
+                Center(child: Text('No invitations or notifications')),
               ],
             )
-          : ListView.builder(
-              itemCount: provider.items.length,
-              itemBuilder: (context, index) {
-                final item = provider.items[index];
-                final senderName = item.sender?.displayLabel ?? 'Unknown';
-
-                return Card(
-                  margin:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        AppAvatar(
-                          url: item.sender?.avatar?.source,
-                          name: senderName,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                senderName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 15,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                'Room #${item.chatRoomId ?? '-'}',
-                                style: TextStyle(color: Colors.grey.shade700),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                item.statusLabel,
-                                style: TextStyle(color: Colors.grey.shade700),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (item.isPending) ...[
-                          IconButton.filledTonal(
-                            onPressed: () async {
-                              await _replyAndRefresh(
-                                invitationId: item.id,
-                                accept: true,
-                              );
-                            },
-                            icon: const Icon(Icons.check),
-                          ),
-                          const SizedBox(width: 4),
-                          IconButton.filledTonal(
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.red.shade50,
-                            ),
-                            onPressed: () async {
-                              await _replyAndRefresh(
-                                invitationId: item.id,
-                                accept: false,
-                              );
-                            },
-                            icon: const Icon(Icons.close, color: Colors.red),
-                          ),
-                        ],
-                      ],
+          : ListView(
+              children: [
+                if (hasGroupNotices) ...[
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 12, 16, 6),
+                    child: Text(
+                      'Group notifications',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black54,
+                      ),
                     ),
                   ),
-                );
-              },
+                  ...groupAddedNotifications.map(
+                    (notification) => Card(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      color:
+                          notification.isRead ? null : const Color(0xFFEAF4FF),
+                      child: ListTile(
+                        leading: const CircleAvatar(
+                          child: Icon(Icons.group_add_rounded),
+                        ),
+                        title: Text(
+                          notification.roomName,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        subtitle: Text(
+                          '${notification.addedBy} added you to this group.',
+                        ),
+                        trailing: IconButton(
+                          tooltip: 'Dismiss',
+                          onPressed: () {
+                            provider.removeGroupAddedNotification(notification);
+                          },
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                if (hasInvites) ...[
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 12, 16, 6),
+                    child: Text(
+                      'Invitations',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ),
+                  ...provider.items.map((item) {
+                    final senderName = item.sender?.displayLabel ?? 'Unknown';
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            AppAvatar(
+                              url: item.sender?.avatar?.source,
+                              name: senderName,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    senderName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    'Room #${item.chatRoomId ?? '-'}',
+                                    style:
+                                        TextStyle(color: Colors.grey.shade700),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    item.statusLabel,
+                                    style:
+                                        TextStyle(color: Colors.grey.shade700),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (item.isPending) ...[
+                              IconButton.filledTonal(
+                                onPressed: () async {
+                                  await _replyAndRefresh(
+                                    invitationId: item.id,
+                                    accept: true,
+                                  );
+                                },
+                                icon: const Icon(Icons.check),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton.filledTonal(
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Colors.red.shade50,
+                                ),
+                                onPressed: () async {
+                                  await _replyAndRefresh(
+                                    invitationId: item.id,
+                                    accept: false,
+                                  );
+                                },
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ],
             ),
     );
   }
