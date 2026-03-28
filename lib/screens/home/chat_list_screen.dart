@@ -15,6 +15,7 @@ class ChatListScreen extends StatefulWidget {
 
 class _ChatListScreenState extends State<ChatListScreen> {
   ChatRoomsProvider? _provider;
+  bool _isNoticeCallbackScheduled = false;
 
   @override
   void initState() {
@@ -38,6 +39,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     final provider = context.watch<ChatRoomsProvider>();
     final currentUsername = context.watch<AuthProvider>().username;
     provider.setCurrentUsername(currentUsername);
+    _showPendingSystemNotice(provider);
 
     if (provider.isLoading && provider.rooms.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -108,5 +110,41 @@ class _ChatListScreenState extends State<ChatListScreen> {
         ],
       ),
     );
+  }
+
+  void _showPendingSystemNotice(ChatRoomsProvider provider) {
+    if (_isNoticeCallbackScheduled || provider.pendingSystemNotice == null) {
+      return;
+    }
+
+    _isNoticeCallbackScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _isNoticeCallbackScheduled = false;
+      if (!mounted) {
+        return;
+      }
+
+      final notice = context.read<ChatRoomsProvider>().consumePendingSystemNotice();
+      if (notice == null) {
+        return;
+      }
+
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF8A3A13),
+          content: Row(
+            children: [
+              const Icon(Icons.group_off_rounded, color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(child: Text(notice.message)),
+            ],
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    });
   }
 }

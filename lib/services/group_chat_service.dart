@@ -1,5 +1,8 @@
 import 'dart:convert';
 
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+
 import '../models/attachment_model.dart';
 import '../models/chat_room_model.dart';
 import '../models/message_receive_model.dart';
@@ -12,7 +15,7 @@ class GroupChatService {
   final ApiClient _apiClient;
 
   /// Create a new group chat
-  /// 
+  ///
   /// [name] - Group name (required)
   /// [memberIds] - List of user IDs to add as members (minimum 2)
   /// [avatarId] - Optional avatar attachment ID
@@ -56,7 +59,7 @@ class GroupChatService {
   }
 
   /// Update group information (admin only)
-  /// 
+  ///
   /// [roomId] - Group room ID
   /// [name] - New group name (optional)
   /// [avatarId] - New avatar attachment ID (optional)
@@ -88,8 +91,52 @@ class GroupChatService {
     return GroupChatDto.fromJson(json);
   }
 
+  /// Update group profile using multipart form (name and/or avatar file).
+  Future<GroupChatDto> updateGroupProfile({
+    required int roomId,
+    String? name,
+    XFile? avatar,
+  }) async {
+    Future<List<http.MultipartFile>> buildFiles() async {
+      if (avatar == null) {
+        return <http.MultipartFile>[];
+      }
+
+      final bytes = await avatar.readAsBytes();
+      return [
+        http.MultipartFile.fromBytes(
+          'avatar',
+          bytes,
+          filename:
+              avatar.name.isEmpty ? 'group_avatar_upload.bin' : avatar.name,
+        ),
+      ];
+    }
+
+    final fields = <String, String>{};
+    final trimmedName = name?.trim();
+    if (trimmedName != null && trimmedName.isNotEmpty) {
+      fields['name'] = trimmedName;
+    }
+
+    final streamed = await _apiClient.putMultipart(
+      '/api/v1/chatrooms/$roomId/groups/',
+      fields: fields,
+      buildFiles: buildFiles,
+    );
+
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode != 200) {
+      throw Exception('Update group profile failed: ${response.body}');
+    }
+
+    final json =
+        jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    return GroupChatDto.fromJson(json);
+  }
+
   /// Add members to a group (any current member)
-  /// 
+  ///
   /// [roomId] - Group room ID
   /// [memberIds] - List of user IDs to add
   Future<GroupChatDto> addMembers({
@@ -131,6 +178,17 @@ class GroupChatService {
 
     if (response.statusCode != 204) {
       throw Exception('Leave group failed: ${response.body}');
+    }
+  }
+
+  /// Dissolve a group (owner only)
+  Future<void> dissolveGroup(int roomId) async {
+    final response = await _apiClient.delete(
+      '/api/v1/chatrooms/$roomId/groups/dissolve/',
+    );
+
+    if (response.statusCode != 204) {
+      throw Exception('Dissolve group failed: ${response.body}');
     }
   }
 }
@@ -177,8 +235,10 @@ class GroupChatDto {
     final avatarJson = json['avatar'];
     final latestMessageJson = json['latestMessage'];
     final membersJson = json['members'] as List<dynamic>? ?? [];
-    final rawIsAdmin = json.containsKey('isAdmin') ? json['isAdmin'] : json['admin'];
-    final rawIsOwner = json.containsKey('isOwner') ? json['isOwner'] : json['owner'];
+    final rawIsAdmin =
+        json.containsKey('isAdmin') ? json['isAdmin'] : json['admin'];
+    final rawIsOwner =
+        json.containsKey('isOwner') ? json['isOwner'] : json['owner'];
 
     return GroupChatDto(
       id: (json['id'] ?? 0) as int,

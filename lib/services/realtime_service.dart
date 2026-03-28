@@ -30,17 +30,31 @@ class InvitationReplyEvent {
 }
 
 class FriendRemovedEvent {
-  const FriendRemovedEvent({required this.roomId});
+  const FriendRemovedEvent({
+    required this.roomId,
+    required this.dissolvedBy,
+    required this.action,
+  });
 
   final int? roomId;
+  final String? dissolvedBy;
+  final String? action;
 
   factory FriendRemovedEvent.fromJson(Map<String, dynamic> json) {
     final rawRoomId = json['roomId'];
-    if (rawRoomId is int) {
-      return FriendRemovedEvent(roomId: rawRoomId);
-    }
+    final rawDissolvedBy = json['dissolvedBy']?.toString().trim();
+    final rawAction = json['action']?.toString().trim().toLowerCase();
+    final parsedRoomId = rawRoomId is int
+        ? rawRoomId
+        : int.tryParse(rawRoomId?.toString() ?? '');
 
-    return FriendRemovedEvent(roomId: int.tryParse(rawRoomId?.toString() ?? ''));
+    return FriendRemovedEvent(
+      roomId: parsedRoomId,
+      dissolvedBy: rawDissolvedBy == null || rawDissolvedBy.isEmpty
+          ? null
+          : rawDissolvedBy,
+      action: rawAction == null || rawAction.isEmpty ? null : rawAction,
+    );
   }
 }
 
@@ -55,6 +69,36 @@ class ChatRoomCreatedEvent {
       chatRoom: roomJson is Map<String, dynamic>
           ? ChatRoomModel.fromJson(roomJson)
           : null,
+    );
+  }
+}
+
+class GroupUpdatedEvent {
+  const GroupUpdatedEvent({
+    required this.roomId,
+    required this.chatRoom,
+  });
+
+  final int? roomId;
+  final ChatRoomModel? chatRoom;
+
+  factory GroupUpdatedEvent.fromJson(Map<String, dynamic> json) {
+    int? parseInt(dynamic value) {
+      if (value is int) {
+        return value;
+      }
+      return int.tryParse(value?.toString() ?? '');
+    }
+
+    final roomJson = json['chatRoom'] ?? json['room'] ?? json['chatRoomDto'];
+    final room = roomJson is Map<String, dynamic>
+        ? ChatRoomModel.fromJson(roomJson)
+        : null;
+    final parsedRoomId = parseInt(json['roomId']) ?? room?.id;
+
+    return GroupUpdatedEvent(
+      roomId: parsedRoomId,
+      chatRoom: room,
     );
   }
 }
@@ -207,7 +251,10 @@ class RealtimeService {
       StreamController<FriendRemovedEvent>.broadcast();
   final StreamController<ChatRoomCreatedEvent> _chatRoomCreatedController =
       StreamController<ChatRoomCreatedEvent>.broadcast();
-  final StreamController<GroupMemberRemovedEvent> _groupMemberRemovedController =
+  final StreamController<GroupUpdatedEvent> _groupUpdatedController =
+      StreamController<GroupUpdatedEvent>.broadcast();
+  final StreamController<GroupMemberRemovedEvent>
+      _groupMemberRemovedController =
       StreamController<GroupMemberRemovedEvent>.broadcast();
   final StreamController<GroupMembersAddedEvent> _groupMembersAddedController =
       StreamController<GroupMembersAddedEvent>.broadcast();
@@ -232,6 +279,8 @@ class RealtimeService {
       _friendRemovedController.stream;
   Stream<ChatRoomCreatedEvent> get chatRoomCreatedStream =>
       _chatRoomCreatedController.stream;
+  Stream<GroupUpdatedEvent> get groupUpdatedStream =>
+      _groupUpdatedController.stream;
   Stream<GroupMemberRemovedEvent> get groupMemberRemovedStream =>
       _groupMemberRemovedController.stream;
   Stream<GroupMembersAddedEvent> get groupMembersAddedStream =>
@@ -239,7 +288,8 @@ class RealtimeService {
 
   Stream<PresenceUpdateEvent> get presenceStream => _presenceController.stream;
   Stream<UserWithAvatarModel> get profileStream => _profileController.stream;
-  Stream<UserBlockStatusModel> get blockStatusStream => _blockStatusController.stream;
+  Stream<UserBlockStatusModel> get blockStatusStream =>
+      _blockStatusController.stream;
 
   Stream<MessageReceiveModel> roomMessageStream(int roomId) {
     _requestedRooms.add(roomId);
@@ -318,6 +368,7 @@ class RealtimeService {
           _subscribeInvitationReplies();
           _subscribeFriendRemoved();
           _subscribeChatRoomCreated();
+          _subscribeGroupUpdated();
           _subscribeGroupMembersAdded();
           _subscribeGroupMemberRemoved();
           _subscribePresence();
@@ -371,6 +422,7 @@ class RealtimeService {
     _invitationReplyController.close();
     _friendRemovedController.close();
     _chatRoomCreatedController.close();
+    _groupUpdatedController.close();
     _groupMemberRemovedController.close();
     _groupMembersAddedController.close();
     _presenceController.close();
@@ -470,13 +522,25 @@ class RealtimeService {
       callback: (frame) {
         final body = frame.body;
         if (body == null || body.isEmpty) {
-          _friendRemovedController.add(const FriendRemovedEvent(roomId: null));
+          _friendRemovedController.add(
+            const FriendRemovedEvent(
+              roomId: null,
+              dissolvedBy: null,
+              action: null,
+            ),
+          );
           return;
         }
 
         final decoded = jsonDecode(body);
         if (decoded is! Map<String, dynamic>) {
-          _friendRemovedController.add(const FriendRemovedEvent(roomId: null));
+          _friendRemovedController.add(
+            const FriendRemovedEvent(
+              roomId: null,
+              dissolvedBy: null,
+              action: null,
+            ),
+          );
           return;
         }
 
@@ -506,6 +570,25 @@ class RealtimeService {
         }
 
         _chatRoomCreatedController.add(ChatRoomCreatedEvent.fromJson(decoded));
+      },
+    );
+  }
+
+  void _subscribeGroupUpdated() {
+    _client?.subscribe(
+      destination: '/user/queue/groups/group_updated',
+      callback: (frame) {
+        final body = frame.body;
+        if (body == null || body.isEmpty) {
+          return;
+        }
+
+        final decoded = jsonDecode(body);
+        if (decoded is! Map<String, dynamic>) {
+          return;
+        }
+
+        _groupUpdatedController.add(GroupUpdatedEvent.fromJson(decoded));
       },
     );
   }

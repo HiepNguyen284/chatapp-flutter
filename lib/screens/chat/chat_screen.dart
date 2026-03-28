@@ -76,6 +76,8 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   StreamSubscription<PresenceUpdateEvent>? _presenceSub;
   StreamSubscription<UserWithAvatarModel>? _profileSub;
   StreamSubscription<UserBlockStatusModel>? _blockStatusSub;
+  StreamSubscription<FriendRemovedEvent>? _roomRemovedSub;
+  StreamSubscription<GroupUpdatedEvent>? _groupUpdatedSub;
   StreamSubscription<GroupMembersAddedEvent>? _groupMembersAddedSub;
   StreamSubscription<GroupMemberRemovedEvent>? _groupMemberRemovedSub;
   StreamSubscription<TypingStatusEvent>? _typingSub;
@@ -95,6 +97,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   bool _isBlockStatusLoading = false;
   bool _blockedByMe = false;
   bool _blockedByPeer = false;
+  bool _isNavigatingBackToChatList = false;
   bool? _isPeerOnline;
   DateTime? _lastSeenAt;
   late String _roomDisplayName;
@@ -118,11 +121,13 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
 
     _loadPresence();
     _loadBlockStatus();
+    _subscribeRoomRemoved();
     _subscribePresence();
     _subscribeProfile();
     _subscribeBlockStatus();
     _subscribeTyping();
     _subscribeReadStatus();
+    _subscribeGroupUpdated();
     _subscribeGroupMembersAdded();
     _subscribeGroupMemberRemoved();
   }
@@ -142,6 +147,8 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
     _presenceSub?.cancel();
     _profileSub?.cancel();
     _blockStatusSub?.cancel();
+    _roomRemovedSub?.cancel();
+    _groupUpdatedSub?.cancel();
     _groupMembersAddedSub?.cancel();
     _groupMemberRemovedSub?.cancel();
     _typingSub?.cancel();
@@ -215,7 +222,10 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   }
 
   void _subscribeReadStatus() {
-    _readSub = context.read<RealtimeService>().roomReadStream(widget.roomId).listen((event) {
+    _readSub = context
+        .read<RealtimeService>()
+        .roomReadStream(widget.roomId)
+        .listen((event) {
       final reader = event.reader;
       final username = reader?.username ?? '';
       if (!mounted || username.isEmpty || username == _myUsername) {
@@ -230,6 +240,122 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
         if (reader != null) {
           _readerByUsername[username] = reader;
         }
+      });
+    });
+  }
+
+  void _subscribeRoomRemoved() {
+    _roomRemovedSub = context
+        .read<RealtimeService>()
+        .friendRemovedStream
+        .listen((event) async {
+      if (!mounted ||
+          _isNavigatingBackToChatList ||
+          event.roomId != widget.roomId) {
+        return;
+      }
+
+      final messenger = ScaffoldMessenger.of(context);
+      final roomsProvider = context.read<ChatRoomsProvider>();
+      final dissolvedBy = (event.dissolvedBy ?? '').trim();
+      final isGroupDissolved = dissolvedBy.isNotEmpty;
+
+      if (isGroupDissolved) {
+        roomsProvider.queueGroupDissolvedNotice(
+          roomId: widget.roomId,
+          roomName: widget.roomName,
+          dissolvedBy: dissolvedBy,
+        );
+      }
+
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+            isGroupDissolved
+                ? 'Nhóm đã bị giải tán. Đang quay về danh sách chat...'
+                : 'This conversation is no longer available.',
+          ),
+        ),
+      );
+
+      await roomsProvider.loadRooms();
+      if (!mounted) {
+        return;
+      }
+
+      // Pop về HomeScreen (Chats) thay vì chỉ pop một màn để tránh trắng
+      _navigateBackToChatList();
+    });
+  }
+
+  void _navigateBackToChatList() {
+    if (!mounted || _isNavigatingBackToChatList) {
+      return;
+    }
+
+    _isNavigatingBackToChatList = true;
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop(true);
+      return;
+    }
+
+    _isNavigatingBackToChatList = false;
+  }
+
+  void _syncRoomDisplayNameFromRoomList() {
+    final roomsProvider = context.read<ChatRoomsProvider>();
+    final currentUsername = context.read<AuthProvider>().username;
+    String? nextName;
+
+    for (final room in roomsProvider.rooms) {
+      if (room.id != widget.roomId) {
+        continue;
+      }
+      nextName = room.displayNameFor(currentUsername).trim();
+      break;
+    }
+
+    if (!mounted ||
+        nextName == null ||
+        nextName.isEmpty ||
+        nextName == _roomDisplayName) {
+      return;
+    }
+
+    setState(() {
+      _roomDisplayName = nextName!;
+    });
+  }
+
+  void _subscribeGroupUpdated() {
+    _groupUpdatedSub =
+        context.read<RealtimeService>().groupUpdatedStream.listen((event) {
+      if (!mounted || event.roomId != widget.roomId) {
+        return;
+      }
+
+      final room = event.chatRoom;
+      if (room == null) {
+        unawaited(context.read<ChatRoomsProvider>().loadRooms().then((_) {
+          if (!mounted) {
+            return;
+          }
+          _syncRoomDisplayNameFromRoomList();
+        }));
+        return;
+      }
+
+      final username = context.read<AuthProvider>().username;
+      final nextName = room.displayNameFor(username).trim();
+      if (nextName.isEmpty || nextName == _roomDisplayName) {
+        return;
+      }
+
+      setState(() {
+        _roomDisplayName = nextName;
       });
     });
   }
@@ -260,8 +386,10 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   }
 
   void _subscribeGroupMemberRemoved() {
-    _groupMemberRemovedSub =
-        context.read<RealtimeService>().groupMemberRemovedStream.listen((event) {
+    _groupMemberRemovedSub = context
+        .read<RealtimeService>()
+        .groupMemberRemovedStream
+        .listen((event) {
       if (!mounted || event.roomId != widget.roomId) {
         return;
       }
@@ -282,7 +410,9 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
 
       _showGroupMemberNotice(
         text: text,
-        type: isLeft ? _GroupSystemNoticeType.left : _GroupSystemNoticeType.removed,
+        type: isLeft
+            ? _GroupSystemNoticeType.left
+            : _GroupSystemNoticeType.removed,
       );
 
       unawaited(context.read<ChatRoomsProvider>().loadRooms());
@@ -295,12 +425,18 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   }) {
     final messenger = ScaffoldMessenger.of(context);
     final (icon, backgroundColor) = switch (type) {
-      _GroupSystemNoticeType.added =>
-        (Icons.person_add_alt_1_rounded, const Color(0xFF0B6BCB)),
-      _GroupSystemNoticeType.removed =>
-        (Icons.person_remove_alt_1_rounded, const Color(0xFFB54708)),
-      _GroupSystemNoticeType.left =>
-        (Icons.logout_rounded, const Color(0xFF0D7A43)),
+      _GroupSystemNoticeType.added => (
+          Icons.person_add_alt_1_rounded,
+          const Color(0xFF0B6BCB)
+        ),
+      _GroupSystemNoticeType.removed => (
+          Icons.person_remove_alt_1_rounded,
+          const Color(0xFFB54708)
+        ),
+      _GroupSystemNoticeType.left => (
+          Icons.logout_rounded,
+          const Color(0xFF0D7A43)
+        ),
     };
 
     messenger.hideCurrentSnackBar();
@@ -364,7 +500,10 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   }
 
   void _subscribeTyping() {
-    _typingSub = context.read<RealtimeService>().roomTypingStream(widget.roomId).listen((event) {
+    _typingSub = context
+        .read<RealtimeService>()
+        .roomTypingStream(widget.roomId)
+        .listen((event) {
       if (!mounted || event.sender == _myUsername) {
         return;
       }
@@ -502,7 +641,8 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
       return;
     }
 
-    _presenceSub = context.read<RealtimeService>().presenceStream.listen((event) {
+    _presenceSub =
+        context.read<RealtimeService>().presenceStream.listen((event) {
       final presence = event.presence;
       if (presence == null || presence.username != peer || !mounted) {
         return;
@@ -521,7 +661,8 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
       return;
     }
 
-    _profileSub = context.read<RealtimeService>().profileStream.listen((profile) {
+    _profileSub =
+        context.read<RealtimeService>().profileStream.listen((profile) {
       final username = (profile.username ?? '').trim();
       if (!mounted || username != peer) {
         return;
@@ -572,7 +713,8 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
       return;
     }
 
-    _blockStatusSub = context.read<RealtimeService>().blockStatusStream.listen((event) {
+    _blockStatusSub =
+        context.read<RealtimeService>().blockStatusStream.listen((event) {
       if (!mounted || event.username != peer) {
         return;
       }
@@ -630,8 +772,9 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   String _formatLastSeen(DateTime value) {
     final seenAt = value.toLocal();
     final now = DateTime.now();
-    final isToday =
-        seenAt.year == now.year && seenAt.month == now.month && seenAt.day == now.day;
+    final isToday = seenAt.year == now.year &&
+        seenAt.month == now.month &&
+        seenAt.day == now.day;
     if (isToday) {
       return 'today at ${DateFormat('HH:mm').format(seenAt)}';
     }
@@ -714,15 +857,17 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
             title: const Text('Delete message'),
             onTap: () async {
               Navigator.pop(context);
-              final deleted = await this.context.read<ChatProvider>().recallMessage(
-                    messageId: messageId,
-                  );
+              final deleted =
+                  await this.context.read<ChatProvider>().recallMessage(
+                        messageId: messageId,
+                      );
               if (!mounted) {
                 return;
               }
 
               if (!deleted) {
-                final error = this.context.read<ChatProvider>().error ?? 'Delete failed';
+                final error =
+                    this.context.read<ChatProvider>().error ?? 'Delete failed';
                 ScaffoldMessenger.of(this.context).showSnackBar(
                   SnackBar(content: Text(error)),
                 );
@@ -745,11 +890,13 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
         : null;
     final isOnline = _isPeerOnline == true;
     final messages = chat.messages;
-    final isGroupRoom = widget.peerUsername == null || widget.peerUsername!.isEmpty;
+    final isGroupRoom =
+        widget.peerUsername == null || widget.peerUsername!.isEmpty;
 
     final senderProfiles = <String, UserWithAvatarModel>{};
     for (final item in messages) {
-      final username = (item.sender ?? item.senderProfile?.username ?? '').trim();
+      final username =
+          (item.sender ?? item.senderProfile?.username ?? '').trim();
       if (username.isEmpty) {
         continue;
       }
@@ -766,7 +913,8 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
     final ownMessageIndexes = <int>[];
     for (var i = 0; i < messages.length; i++) {
       final item = messages[i];
-      final senderUsername = (item.sender ?? item.senderProfile?.username ?? '').trim();
+      final senderUsername =
+          (item.sender ?? item.senderProfile?.username ?? '').trim();
       if (myUsername != null && senderUsername == myUsername) {
         ownMessageIndexes.add(i);
       }
@@ -895,10 +1043,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
         return '';
       }
 
-      return (message.sender ??
-              message.senderProfile?.username ??
-              '')
-          .trim();
+      return (message.sender ?? message.senderProfile?.username ?? '').trim();
     }
 
     return Scaffold(
@@ -924,7 +1069,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isOnline
+                            color: isOnline
                                 ? const Color(0xFF0A8F47)
                                 : Colors.black54,
                           ),
@@ -954,11 +1099,15 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                 }
 
                 if (leftGroup == true) {
-                  navigator.pop(true);
+                  _navigateBackToChatList();
                   return;
                 }
 
                 await roomsProvider.loadRooms();
+                if (!mounted) {
+                  return;
+                }
+                _syncRoomDisplayNameFromRoomList();
               },
             ),
           IconButton(
@@ -975,38 +1124,44 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: timelineItems.length,
+                    itemCount: timelineItems.length,
                     itemBuilder: (context, index) {
-                    final timeline = timelineItems[index];
-                    final messageIndex = timeline.messageIndex!;
-                    final item = messages[messageIndex];
-                    final systemNotice = _groupSystemNoticeFromMessage(item);
-                    if (systemNotice != null) {
-                    return _GroupSystemNoticeTile(notice: systemNotice);
-                    }
+                      final timeline = timelineItems[index];
+                      final messageIndex = timeline.messageIndex!;
+                      final item = messages[messageIndex];
+                      final systemNotice = _groupSystemNoticeFromMessage(item);
+                      if (systemNotice != null) {
+                        return _GroupSystemNoticeTile(notice: systemNotice);
+                      }
 
                       final senderUsername =
-                          (item.sender ?? item.senderProfile?.username ?? '').trim();
-                      final isMine = myUsername != null && senderUsername == myUsername;
+                          (item.sender ?? item.senderProfile?.username ?? '')
+                              .trim();
+                      final isMine =
+                          myUsername != null && senderUsername == myUsername;
                       final senderProfile = senderProfiles[senderUsername];
 
-                    final previousSender = senderAtTimelineIndex(index - 1);
-                    final nextSender = senderAtTimelineIndex(index + 1);
-                      final isStartSenderBlock = senderUsername != previousSender;
+                      final previousSender = senderAtTimelineIndex(index - 1);
+                      final nextSender = senderAtTimelineIndex(index + 1);
+                      final isStartSenderBlock =
+                          senderUsername != previousSender;
                       final isEndSenderBlock = senderUsername != nextSender;
                       const firstMessageGap = 4.0;
                       const differentSenderGap = 18.0;
                       const sameSenderGap = 1.0;
                       final bubbleTopSpacing = isStartSenderBlock
-                      ? (messageIndex == 0 ? firstMessageGap : differentSenderGap)
+                          ? (messageIndex == 0
+                              ? firstMessageGap
+                              : differentSenderGap)
                           : sameSenderGap;
 
                       final seenByAvatars = isMine
-                      ? (seenByAvatarsByIndex[messageIndex] ?? const <SeenAvatarInfo>[])
+                          ? (seenByAvatarsByIndex[messageIndex] ??
+                              const <SeenAvatarInfo>[])
                           : const <SeenAvatarInfo>[];
 
                       String? deliveryStatus;
-                    if (isMine && messageIndex == lastOwnIndex) {
+                      if (isMine && messageIndex == lastOwnIndex) {
                         deliveryStatus = seenByAvatars.isNotEmpty
                             ? '\u0110\u00e3 xem'
                             : '\u0110\u00e3 g\u1eedi';
@@ -1017,10 +1172,13 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                         isMine: isMine,
                         deliveryStatus: deliveryStatus,
                         seenByAvatars: seenByAvatars,
-                        senderName: senderProfile?.displayLabel ?? senderUsername,
+                        senderName:
+                            senderProfile?.displayLabel ?? senderUsername,
                         senderAvatarUrl: senderProfile?.avatar?.source,
-                        showSenderName: !isMine && isGroupRoom && isStartSenderBlock,
-                        showSenderAvatar: !isMine && (!isGroupRoom || isEndSenderBlock),
+                        showSenderName:
+                            !isMine && isGroupRoom && isStartSenderBlock,
+                        showSenderAvatar:
+                            !isMine && (!isGroupRoom || isEndSenderBlock),
                         reserveSenderAvatarSpace: !isMine && isGroupRoom,
                         topSpacing: bubbleTopSpacing,
                         onLongPress: () {
@@ -1145,7 +1303,8 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                   ),
                   const SizedBox(width: 6),
                   IconButton.filled(
-                    onPressed: chat.isSending || _isMessagingBlocked ? null : _send,
+                    onPressed:
+                        chat.isSending || _isMessagingBlocked ? null : _send,
                     style: IconButton.styleFrom(
                       backgroundColor: const Color(0xFF168AFF),
                     ),
@@ -1212,9 +1371,18 @@ class _GroupSystemNoticeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (icon, color) = switch (notice.type) {
-      _GroupSystemNoticeType.added => (Icons.person_add_alt_1_rounded, const Color(0xFF0B6BCB)),
-      _GroupSystemNoticeType.removed => (Icons.person_remove_alt_1_rounded, const Color(0xFFB54708)),
-      _GroupSystemNoticeType.left => (Icons.logout_rounded, const Color(0xFF0D7A43)),
+      _GroupSystemNoticeType.added => (
+          Icons.person_add_alt_1_rounded,
+          const Color(0xFF0B6BCB)
+        ),
+      _GroupSystemNoticeType.removed => (
+          Icons.person_remove_alt_1_rounded,
+          const Color(0xFFB54708)
+        ),
+      _GroupSystemNoticeType.left => (
+          Icons.logout_rounded,
+          const Color(0xFF0D7A43)
+        ),
     };
 
     return Padding(

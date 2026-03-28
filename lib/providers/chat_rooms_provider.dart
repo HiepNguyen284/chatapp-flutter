@@ -11,6 +11,18 @@ import '../services/realtime_service.dart';
 import '../services/unread_state_service.dart';
 import '../services/user_service.dart';
 
+class ChatListSystemNotice {
+  const ChatListSystemNotice({
+    required this.roomId,
+    required this.message,
+    required this.createdAt,
+  });
+
+  final int roomId;
+  final String message;
+  final DateTime createdAt;
+}
+
 class ChatRoomsProvider extends ChangeNotifier {
   ChatRoomsProvider(
     this._chatRoomService,
@@ -31,6 +43,7 @@ class ChatRoomsProvider extends ChangeNotifier {
   StreamSubscription<InvitationReplyEvent>? _invitationReplySub;
   StreamSubscription<FriendRemovedEvent>? _friendRemovedSub;
   StreamSubscription<ChatRoomCreatedEvent>? _chatRoomCreatedSub;
+  StreamSubscription<GroupUpdatedEvent>? _groupUpdatedSub;
   StreamSubscription<PresenceUpdateEvent>? _presenceSub;
   StreamSubscription<UserWithAvatarModel>? _profileSub;
   final Map<int, int> _unreadCounts = {};
@@ -42,10 +55,46 @@ class ChatRoomsProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   List<ChatRoomModel> _rooms = const [];
+  ChatListSystemNotice? _pendingSystemNotice;
 
   bool get isLoading => _isLoading;
   String? get error => _error;
   List<ChatRoomModel> get rooms => _rooms;
+  ChatListSystemNotice? get pendingSystemNotice => _pendingSystemNotice;
+
+  ChatListSystemNotice? consumePendingSystemNotice() {
+    final notice = _pendingSystemNotice;
+    _pendingSystemNotice = null;
+    return notice;
+  }
+
+  void queueGroupDissolvedNotice({
+    required int roomId,
+    required String roomName,
+    required String dissolvedBy,
+  }) {
+    final normalizedBy = dissolvedBy.trim();
+    if (normalizedBy.isEmpty) {
+      return;
+    }
+
+    final normalizedName = roomName.trim();
+    final label = normalizedName.isEmpty ? 'Nhóm chat' : normalizedName;
+    final message = 'Nhóm "$label" đã được giải tán bởi $normalizedBy.';
+
+    final existing = _pendingSystemNotice;
+    if (existing != null &&
+        existing.roomId == roomId &&
+        existing.message == message) {
+      return;
+    }
+
+    _pendingSystemNotice = ChatListSystemNotice(
+      roomId: roomId,
+      message: message,
+      createdAt: DateTime.now(),
+    );
+  }
 
   int unreadCountFor(int roomId) => _unreadCounts[roomId] ?? 0;
   bool isPeerOnlineFor(int roomId) => _roomPeerOnline[roomId] ?? false;
@@ -150,16 +199,29 @@ class ChatRoomsProvider extends ChangeNotifier {
       notifyListeners();
     });
 
-    _friendRemovedSub ??=
-        _realtimeService.friendRemovedStream.listen((event) {
+    _friendRemovedSub ??= _realtimeService.friendRemovedStream.listen((event) {
       final roomId = event.roomId;
       if (roomId == null) {
         return;
       }
 
-      final nextRooms = _rooms.where((room) => room.id != roomId).toList();
-      if (nextRooms.length == _rooms.length) {
+      final roomIndex = _rooms.indexWhere((room) => room.id == roomId);
+      if (roomIndex < 0) {
         return;
+      }
+
+      final removedRoom = _rooms[roomIndex];
+      final nextRooms = [..._rooms]..removeAt(roomIndex);
+
+      final dissolvedBy = (event.dissolvedBy ?? '').trim();
+      final isGroupDissolved =
+          removedRoom.type == ChatRoomType.group && dissolvedBy.isNotEmpty;
+      if (isGroupDissolved) {
+        queueGroupDissolvedNotice(
+          roomId: roomId,
+          roomName: removedRoom.displayNameFor(_currentUsername),
+          dissolvedBy: dissolvedBy,
+        );
       }
 
       _rooms = nextRooms;
@@ -183,6 +245,26 @@ class ChatRoomsProvider extends ChangeNotifier {
         return;
       }
       upsertRoom(room);
+    });
+
+    _groupUpdatedSub ??= _realtimeService.groupUpdatedStream.listen((event) {
+      final updatedRoom = event.chatRoom;
+      if (updatedRoom != null) {
+        upsertRoom(updatedRoom);
+        return;
+      }
+
+      final roomId = event.roomId;
+      if (roomId == null) {
+        return;
+      }
+
+      final hasRoom = _rooms.any((room) => room.id == roomId);
+      if (!hasRoom) {
+        return;
+      }
+
+      unawaited(loadRooms());
     });
 
     _presenceSub ??= _realtimeService.presenceStream.listen((event) {
@@ -230,6 +312,9 @@ class ChatRoomsProvider extends ChangeNotifier {
     _chatRoomCreatedSub?.cancel();
     _chatRoomCreatedSub = null;
 
+    _groupUpdatedSub?.cancel();
+    _groupUpdatedSub = null;
+
     _presenceSub?.cancel();
     _presenceSub = null;
 
@@ -247,7 +332,8 @@ class ChatRoomsProvider extends ChangeNotifier {
     final next = <ChatRoomModel>[];
 
     for (final room in _rooms) {
-      if (room.type != ChatRoomType.duo || room.duoPeerFor(_currentUsername) != username) {
+      if (room.type != ChatRoomType.duo ||
+          room.duoPeerFor(_currentUsername) != username) {
         next.add(room);
         continue;
       }
@@ -257,7 +343,8 @@ class ChatRoomsProvider extends ChangeNotifier {
         avatar: profile.avatar,
       );
 
-      if (updated.name != room.name || updated.avatar?.source != room.avatar?.source) {
+      if (updated.name != room.name ||
+          updated.avatar?.source != room.avatar?.source) {
         changed = true;
       }
 
@@ -365,7 +452,8 @@ class ChatRoomsProvider extends ChangeNotifier {
     }
   }
 
-  Future<int> _countUnreadFromHistory(int roomId, String currentUsername) async {
+  Future<int> _countUnreadFromHistory(
+      int roomId, String currentUsername) async {
     var lastReadAt = await _unreadStateService.getLastReadAt(roomId);
 
     // Backward-compatible migration: if we don't have a read marker yet,
@@ -382,7 +470,8 @@ class ChatRoomsProvider extends ChangeNotifier {
     var unread = 0;
 
     for (var page = 1; page <= 20; page++) {
-      final messages = await _messageService.listMessages(roomId: roomId, page: page);
+      final messages =
+          await _messageService.listMessages(roomId: roomId, page: page);
       if (messages.isEmpty) {
         break;
       }

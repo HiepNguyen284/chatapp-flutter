@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/user_with_avatar_model.dart';
@@ -30,13 +32,18 @@ class GroupMembersScreen extends StatefulWidget {
 }
 
 class _GroupMembersScreenState extends State<GroupMembersScreen> {
+  final TextEditingController _groupNameController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   final Map<int, UserWithAvatarModel> _selectedUsersById = {};
+  final ImagePicker _picker = ImagePicker();
 
   Timer? _searchDebounce;
+  StreamSubscription<GroupUpdatedEvent>? _groupUpdatedSub;
   StreamSubscription<GroupMembersAddedEvent>? _membersAddedSub;
   StreamSubscription<GroupMemberRemovedEvent>? _memberRemovedSub;
   GroupChatDto? _group;
+  XFile? _selectedAvatarFile;
+  Uint8List? _selectedAvatarBytes;
   List<UserWithAvatarModel> _searchResults = const [];
   bool _isLoading = false;
   bool _isSearching = false;
@@ -47,6 +54,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
   @override
   void initState() {
     super.initState();
+    _subscribeGroupUpdated();
     _subscribeGroupMembersAdded();
     _subscribeGroupMemberRemoved();
     unawaited(_loadGroup());
@@ -55,8 +63,10 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _groupUpdatedSub?.cancel();
     _membersAddedSub?.cancel();
     _memberRemovedSub?.cancel();
+    _groupNameController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -64,7 +74,9 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
   void _subscribeGroupMembersAdded() {
     _membersAddedSub =
         context.read<RealtimeService>().groupMembersAddedStream.listen((event) {
-      if (!mounted || event.roomId != widget.roomId || event.newMembers.isEmpty) {
+      if (!mounted ||
+          event.roomId != widget.roomId ||
+          event.newMembers.isEmpty) {
         return;
       }
 
@@ -84,16 +96,36 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
     });
   }
 
+  void _subscribeGroupUpdated() {
+    _groupUpdatedSub =
+        context.read<RealtimeService>().groupUpdatedStream.listen((event) {
+      if (!mounted || event.roomId != widget.roomId) {
+        return;
+      }
+
+      if (_selectedAvatarFile != null || _selectedAvatarBytes != null) {
+        setState(() {
+          _selectedAvatarFile = null;
+          _selectedAvatarBytes = null;
+        });
+      }
+
+      unawaited(_loadGroup(showLoading: false));
+    });
+  }
+
   void _subscribeGroupMemberRemoved() {
-    _memberRemovedSub =
-        context.read<RealtimeService>().groupMemberRemovedStream.listen((event) {
+    _memberRemovedSub = context
+        .read<RealtimeService>()
+        .groupMemberRemovedStream
+        .listen((event) {
       if (!mounted || event.roomId != widget.roomId) {
         return;
       }
 
       final isLeft = event.action == 'left';
       final username = (event.removedUsername ?? '').trim();
-        final actionBy = (event.actionBy ?? '').trim();
+      final actionBy = (event.actionBy ?? '').trim();
       final fallback = isLeft
           ? 'A member left the group.'
           : 'A member was removed from the group.';
@@ -101,16 +133,18 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
           ? fallback
           : isLeft
               ? '$username left the group.'
-            : actionBy.isEmpty || actionBy == username
-              ? '$username was removed from the group.'
-              : '$actionBy removed $username from the group.';
+              : actionBy.isEmpty || actionBy == username
+                  ? '$username was removed from the group.'
+                  : '$actionBy removed $username from the group.';
 
       unawaited(_loadGroup(showLoading: false));
       unawaited(context.read<ChatRoomsProvider>().loadRooms());
 
       _showGroupMemberNotice(
         text: text,
-        type: isLeft ? _GroupMemberNoticeType.left : _GroupMemberNoticeType.removed,
+        type: isLeft
+            ? _GroupMemberNoticeType.left
+            : _GroupMemberNoticeType.removed,
       );
     });
   }
@@ -121,12 +155,18 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
   }) {
     final messenger = ScaffoldMessenger.of(context);
     final (icon, backgroundColor) = switch (type) {
-      _GroupMemberNoticeType.added =>
-        (Icons.person_add_alt_1_rounded, const Color(0xFF0B6BCB)),
-      _GroupMemberNoticeType.removed =>
-        (Icons.person_remove_alt_1_rounded, const Color(0xFFB54708)),
-      _GroupMemberNoticeType.left =>
-        (Icons.logout_rounded, const Color(0xFF0D7A43)),
+      _GroupMemberNoticeType.added => (
+          Icons.person_add_alt_1_rounded,
+          const Color(0xFF0B6BCB)
+        ),
+      _GroupMemberNoticeType.removed => (
+          Icons.person_remove_alt_1_rounded,
+          const Color(0xFFB54708)
+        ),
+      _GroupMemberNoticeType.left => (
+          Icons.logout_rounded,
+          const Color(0xFF0D7A43)
+        ),
     };
 
     messenger.hideCurrentSnackBar();
@@ -186,6 +226,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
 
       setState(() {
         _group = dto;
+        _groupNameController.text = dto.name;
         _error = null;
       });
 
@@ -304,6 +345,101 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
         _selectedUsersById[userId] = user;
       }
     });
+  }
+
+  Future<void> _pickGroupAvatar() async {
+    if (_isSubmitting) {
+      return;
+    }
+
+    final picked = await _picker.pickImage(source: ImageSource.gallery);
+    if (picked == null || !mounted) {
+      return;
+    }
+
+    final bytes = await picked.readAsBytes();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _selectedAvatarFile = picked;
+      _selectedAvatarBytes = bytes;
+    });
+  }
+
+  Future<void> _updateGroupProfile() async {
+    final group = _group;
+    if (group == null || !group.isAdmin) {
+      return;
+    }
+
+    final nextName = _groupNameController.text.trim();
+    if (nextName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Group name cannot be empty.')),
+      );
+      return;
+    }
+
+    final hasNameChanged = nextName != group.name.trim();
+    final hasAvatarChanged = _selectedAvatarFile != null;
+
+    if (!hasNameChanged && !hasAvatarChanged) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No changes to save.')),
+      );
+      return;
+    }
+
+    final roomsProvider = context.read<ChatRoomsProvider>();
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      final updated = await context.read<GroupChatService>().updateGroupProfile(
+            roomId: widget.roomId,
+            name: hasNameChanged ? nextName : null,
+            avatar: _selectedAvatarFile,
+          );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _group = updated;
+        _groupNameController.text = updated.name;
+        _selectedAvatarFile = null;
+        _selectedAvatarBytes = null;
+      });
+
+      roomsProvider.upsertRoom(updated.toChatRoomModel());
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Group information updated.')),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _friendlyError(
+              error,
+              fallback: 'Update group information failed.',
+            ),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
   }
 
   Future<void> _addSelectedMembers() async {
@@ -507,6 +643,78 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
     }
   }
 
+  Future<void> _dissolveGroup() async {
+    final roomsProvider = context.read<ChatRoomsProvider>();
+    final shouldDissolve = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Dissolve group'),
+          content: const Text(
+            'This action will permanently delete the group and all messages for every member. Continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFB42318),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Dissolve'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDissolve != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      await context.read<GroupChatService>().dissolveGroup(widget.roomId);
+      if (!mounted) {
+        return;
+      }
+
+      await roomsProvider.loadRooms();
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _friendlyError(
+              error,
+              fallback: 'Dissolve group failed.',
+            ),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final group = _group;
@@ -586,6 +794,103 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
             ),
           const SizedBox(height: 8),
           Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF4F7FF),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFCDD9FF)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Group information',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Stack(
+                      children: [
+                        _selectedAvatarBytes != null
+                            ? CircleAvatar(
+                                radius: 28,
+                                backgroundColor: const Color(0xFFDCEBFF),
+                                backgroundImage:
+                                    MemoryImage(_selectedAvatarBytes!),
+                              )
+                            : AppAvatar(
+                                url: group.avatar?.source,
+                                name: group.name,
+                                radius: 28,
+                              ),
+                        if (group.isAdmin)
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: InkWell(
+                              onTap: _isSubmitting ? null : _pickGroupAvatar,
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF168AFF),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 1.2,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.camera_alt_rounded,
+                                  size: 14,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _groupNameController,
+                        enabled: group.isAdmin && !_isSubmitting,
+                        textInputAction: TextInputAction.done,
+                        decoration: const InputDecoration(
+                          labelText: 'Group name',
+                          hintText: 'Enter group name',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (group.isAdmin) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _isSubmitting ? null : _pickGroupAvatar,
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const Text('Choose avatar'),
+                      ),
+                      FilledButton.icon(
+                        onPressed: _isSubmitting ? null : _updateGroupProfile,
+                        icon: const Icon(Icons.save_outlined),
+                        label: const Text('Save changes'),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: group.isOwner
@@ -600,12 +905,16 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
             ),
             child: Text(
               group.isOwner
-                  ? 'You are the group owner. You can remove members.'
-                  : 'Only group owner can remove members.',
+                  ? 'You are the group owner. You can edit group info, remove members, and dissolve this group.'
+                  : group.isAdmin
+                      ? 'You are a group admin. You can edit group information.'
+                      : 'Only group owner can remove members.',
               style: TextStyle(
                 color: group.isOwner
                     ? const Color(0xFF0D7A43)
-                    : const Color(0xFF7A4A00),
+                    : group.isAdmin
+                        ? const Color(0xFF0B6BCB)
+                        : const Color(0xFF7A4A00),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -632,7 +941,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
                 subtitle: hasSecondaryName ? Text('@$username') : null,
                 trailing: isMe
                     ? Text(
-                        group.isOwner ? 'You • Owner' : 'You',
+                        group.isOwner ? 'You (Owner)' : 'You',
                         style: const TextStyle(
                           color: Color(0xFF168AFF),
                           fontWeight: FontWeight.w700,
@@ -747,13 +1056,23 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-          child: OutlinedButton(
-            onPressed: _isSubmitting ? null : _leaveGroup,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red.shade700,
-            ),
-            child: const Text('Leave group'),
-          ),
+          child: group.isOwner
+              ? FilledButton.icon(
+                  onPressed: _isSubmitting ? null : _dissolveGroup,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFB42318),
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.delete_forever_outlined),
+                  label: const Text('Dissolve group'),
+                )
+              : OutlinedButton(
+                  onPressed: _isSubmitting ? null : _leaveGroup,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red.shade700,
+                  ),
+                  child: const Text('Leave group'),
+                ),
         ),
       ),
     );
