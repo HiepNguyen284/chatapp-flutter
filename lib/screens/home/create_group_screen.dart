@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/app_theme.dart';
 import '../../models/user_with_avatar_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_rooms_provider.dart';
@@ -202,7 +203,10 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
               alignment: Alignment.centerLeft,
               child: Text(
                 'Tên nhóm có thể chứa tối đa 100 ký tự.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: AppColors.textSecondary),
               ),
             ),
           ),
@@ -229,7 +233,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                 Text(
                   'Tối thiểu 2 thành viên',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.black54,
+                        color: AppColors.textSecondary,
                       ),
                 ),
               ],

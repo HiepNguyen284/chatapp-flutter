@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/app_theme.dart';
 import '../../providers/chat_rooms_provider.dart';
 import '../../providers/invitation_provider.dart';
 import '../../widgets/app_avatar.dart';
@@ -78,7 +79,7 @@ class _InvitationsScreenState extends State<InvitationsScreen> {
                       'Thông báo nhóm',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: Colors.black54,
+                        color: AppColors.textSecondary,
                       ),
                     ),
                   ),
@@ -89,7 +90,7 @@ class _InvitationsScreenState extends State<InvitationsScreen> {
                         vertical: 6,
                       ),
                       color:
-                          notification.isRead ? null : const Color(0xFFEAF4FF),
+                          notification.isRead ? null : AppColors.primary.withOpacity(0.16),
                       child: ListTile(
                         leading: const CircleAvatar(
                           child: Icon(Icons.group_add_rounded),
@@ -119,7 +120,7 @@ class _InvitationsScreenState extends State<InvitationsScreen> {
                       'Lời mời',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: Colors.black54,
+                        color: AppColors.textSecondary,
                       ),
                     ),
                   ),
@@ -154,14 +155,16 @@ class _InvitationsScreenState extends State<InvitationsScreen> {
                                   const SizedBox(height: 3),
                                   Text(
                                     'Phòng #${item.chatRoomId ?? '-'}',
-                                    style:
-                                        TextStyle(color: Colors.grey.shade700),
+                                    style: const TextStyle(
+                                      color: AppColors.textSecondary,
+                                    ),
                                   ),
                                   const SizedBox(height: 3),
                                   Text(
                                     item.statusLabel,
-                                    style:
-                                        TextStyle(color: Colors.grey.shade700),
+                                    style: const TextStyle(
+                                      color: AppColors.textSecondary,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -179,7 +182,7 @@ class _InvitationsScreenState extends State<InvitationsScreen> {
                               const SizedBox(width: 4),
                               IconButton.filledTonal(
                                 style: IconButton.styleFrom(
-                                  backgroundColor: Colors.red.shade50,
+                                  backgroundColor: Colors.redAccent.withOpacity(0.18),
                                 ),
                                 onPressed: () async {
                                   await _replyAndRefresh(
@@ -189,7 +192,7 @@ class _InvitationsScreenState extends State<InvitationsScreen> {
                                 },
                                 icon: const Icon(
                                   Icons.close,
-                                  color: Colors.red,
+                                  color: Colors.redAccent,
                                 ),
                               ),
                             ],

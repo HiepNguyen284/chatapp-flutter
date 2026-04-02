@@ -33,10 +33,26 @@ class AppColors {
 }
 
 class AppTheme {
+  static const appFontFamily = 'Times New Roman';
+
   static ThemeData get dark {
+    final baseTextTheme = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+    ).textTheme;
+
+    final appTextTheme = baseTextTheme.apply(
+      bodyColor: AppColors.textPrimary,
+      displayColor: AppColors.textPrimary,
+      fontFamily: appFontFamily,
+    );
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      fontFamily: appFontFamily,
+      textTheme: appTextTheme,
+      primaryTextTheme: appTextTheme,
       colorScheme: const ColorScheme.dark(
         primary: AppColors.primary,
         secondary: AppColors.primaryLight,
@@ -146,6 +162,10 @@ class AppTheme {
         color: AppColors.border,
         thickness: 0.5,
         space: 0,
+      ),
+      listTileTheme: const ListTileThemeData(
+        textColor: AppColors.textPrimary,
+        iconColor: AppColors.textSecondary,
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColors.bgSurface,

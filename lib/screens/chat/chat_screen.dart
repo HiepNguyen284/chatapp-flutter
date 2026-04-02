@@ -1240,9 +1240,7 @@ child: Column(
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isOnline
-                                ? const Color(0xFF0A8F47)
-                                : Colors.black54,
+                        color: isOnline ? AppColors.online : AppColors.textSecondary,
                           ),
                     ),
                 ],
@@ -1409,7 +1407,7 @@ child: Column(
                           },
                           child: Container(
                             decoration: const BoxDecoration(
-                              color: Colors.black54,
+                              color: AppColors.bgSurface,
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
@@ -1433,13 +1431,13 @@ child: Column(
               margin: const EdgeInsets.fromLTRB(10, 6, 10, 2),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF4E5),
+                color: AppColors.bgSurface,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFFFD08A)),
+                border: Border.all(color: AppColors.border),
               ),
               child: Text(
                 blockedBannerText,
-                style: const TextStyle(color: Color(0xFF7A4A00), fontSize: 13),
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
             ),
           AnimatedContainer(
@@ -1452,7 +1450,7 @@ child: Column(
                 : Text(
                     typingLabel,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFF168AFF),
+                      color: AppColors.primary,
                           fontStyle: FontStyle.italic,
                         ),
                   ),
@@ -1467,7 +1465,7 @@ child: Column(
                   IconButton(
                     onPressed: _isMessagingBlocked ? null : _pickImage,
                     icon: const Icon(Icons.image_rounded),
-                    color: const Color(0xFF168AFF),
+                    color: AppColors.primary,
                   ),
                   Expanded(
                     child: TextField(
@@ -1506,7 +1504,7 @@ child: Column(
                   IconButton.filled(
                     onPressed: chat.isSending || _isMessagingBlocked ? null : _send,
                     style: IconButton.styleFrom(
-                      backgroundColor: const Color(0xFF168AFF),
+                      backgroundColor: AppColors.primary,
                       padding: const EdgeInsets.all(10),
                     ),
                     icon: chat.isSending
@@ -1572,9 +1570,9 @@ class _GroupSystemNoticeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (icon, color) = switch (notice.type) {
-      _GroupSystemNoticeType.added => (Icons.person_add_alt_1_rounded, const Color(0xFF0B6BCB)),
-      _GroupSystemNoticeType.removed => (Icons.person_remove_alt_1_rounded, const Color(0xFFB54708)),
-      _GroupSystemNoticeType.left => (Icons.logout_rounded, const Color(0xFF0D7A43)),
+      _GroupSystemNoticeType.added => (Icons.person_add_alt_1_rounded, AppColors.primary),
+      _GroupSystemNoticeType.removed => (Icons.person_remove_alt_1_rounded, Colors.orangeAccent),
+      _GroupSystemNoticeType.left => (Icons.logout_rounded, AppColors.online),
     };
 
     return Padding(
@@ -1584,9 +1582,9 @@ class _GroupSystemNoticeTile extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 320),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: const Color(0xFFF3F4F6),
+            color: AppColors.bgSurface,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
+            border: Border.all(color: AppColors.border),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -1598,7 +1596,7 @@ class _GroupSystemNoticeTile extends StatelessWidget {
                   notice.text,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Color(0xFF374151),
+                    color: AppColors.textPrimary,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1608,7 +1606,7 @@ class _GroupSystemNoticeTile extends StatelessWidget {
               Text(
                 DateFormat('HH:mm').format(notice.at.toLocal()),
                 style: const TextStyle(
-                  color: Color(0xFF6B7280),
+                  color: AppColors.textSecondary,
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
                 ),
@@ -1633,7 +1631,7 @@ class _PickedFilePreview extends StatelessWidget {
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const ColoredBox(
-            color: Color(0xFFE5E7EB),
+            color: AppColors.bgInput,
             child: Center(
               child: SizedBox(
                 width: 14,

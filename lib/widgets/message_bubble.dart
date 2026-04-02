@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../core/app_theme.dart';
 import '../models/attachment_model.dart';
 import '../models/message_receive_model.dart';
 import '../models/user_with_avatar_model.dart';
@@ -138,7 +139,7 @@ class MessageBubble extends StatelessWidget {
                       child: Text(
                         senderLabel,
                         style: const TextStyle(
-                          color: Color(0xFF1F2937),
+                          color: AppColors.textSecondary,
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.1,
@@ -152,7 +153,8 @@ class MessageBubble extends StatelessWidget {
                       constraints: const BoxConstraints(maxWidth: 280),
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
-                        color: isMine ? const Color(0xFF168AFF) : const Color(0xFFE8EBEF),
+                        color: isMine ? AppColors.primary : AppColors.bgCard,
+                        border: isMine ? null : Border.all(color: AppColors.border),
                         borderRadius: BorderRadius.only(
                           topLeft: const Radius.circular(18),
                           topRight: const Radius.circular(18),
@@ -179,12 +181,14 @@ class MessageBubble extends StatelessWidget {
                                     errorBuilder: (_, __, ___) => Container(
                                       width: 220,
                                       height: 120,
-                                      color: Colors.black12,
+                                      color: AppColors.bgSurface,
                                       alignment: Alignment.center,
                                       child: Text(
                                         'Cannot load image',
                                         style: TextStyle(
-                                          color: isMine ? Colors.white70 : Colors.black54,
+                                          color: isMine
+                                              ? Colors.white70
+                                              : AppColors.textSecondary,
                                           fontSize: 12,
                                         ),
                                       ),
@@ -198,7 +202,7 @@ class MessageBubble extends StatelessWidget {
                           Text(
                             message.message!,
                             style: TextStyle(
-                              color: isMine ? Colors.white : Colors.black87,
+                              color: isMine ? Colors.white : AppColors.textPrimary,
                               fontSize: 15,
                               height: 1.25,
                             ),
@@ -207,7 +211,9 @@ class MessageBubble extends StatelessWidget {
                           Text(
                             'Tin nhan da bi xoa',
                             style: TextStyle(
-                              color: isMine ? Colors.white70 : Colors.black54,
+                              color: isMine
+                                  ? Colors.white70
+                                  : AppColors.textSecondary,
                               fontSize: 13,
                               fontStyle: FontStyle.italic,
                             ),
@@ -223,7 +229,9 @@ class MessageBubble extends StatelessWidget {
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
                                   valueColor: AlwaysStoppedAnimation<Color>(
-                                    isMine ? Colors.white70 : Colors.black54,
+                                    isMine
+                                        ? Colors.white70
+                                        : AppColors.textSecondary,
                                   ),
                                 ),
                               ),
@@ -231,7 +239,9 @@ class MessageBubble extends StatelessWidget {
                               Text(
                                 'Dang dich sang tieng Viet...',
                                 style: TextStyle(
-                                  color: isMine ? Colors.white70 : Colors.black54,
+                                  color: isMine
+                                      ? Colors.white70
+                                      : AppColors.textSecondary,
                                   fontSize: 12,
                                   fontStyle: FontStyle.italic,
                                 ),
@@ -250,12 +260,12 @@ class MessageBubble extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: isMine
                                   ? Colors.white.withOpacity(0.18)
-                                  : Colors.white,
+                                  : AppColors.bgSurface,
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
                                 color: isMine
                                     ? Colors.white.withOpacity(0.35)
-                                    : const Color(0xFFD5D9E0),
+                                    : AppColors.border,
                               ),
                             ),
                             child: Column(
@@ -266,7 +276,9 @@ class MessageBubble extends StatelessWidget {
                                 Text(
                                   'Ban dich tieng Viet',
                                   style: TextStyle(
-                                    color: isMine ? Colors.white70 : Colors.black54,
+                                    color: isMine
+                                        ? Colors.white70
+                                        : AppColors.textSecondary,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -275,7 +287,9 @@ class MessageBubble extends StatelessWidget {
                                 Text(
                                   normalizedTranslatedText,
                                   style: TextStyle(
-                                    color: isMine ? Colors.white : Colors.black87,
+                                    color: isMine
+                                        ? Colors.white
+                                        : AppColors.textPrimary,
                                     fontSize: 14,
                                     height: 1.3,
                                   ),
@@ -291,7 +305,7 @@ class MessageBubble extends StatelessWidget {
                             style: TextStyle(
                               color: isMine
                                   ? Colors.white.withOpacity(0.85)
-                                  : Colors.black45,
+                                  : AppColors.textHint,
                               fontSize: 11,
                             ),
                           ),
@@ -322,10 +336,10 @@ class MessageBubble extends StatelessWidget {
                                   ),
                                 if (seenByAvatars.length == 1) ...[
                                   const SizedBox(width: 6),
-                                  Text(
+                                  const Text(
                                     '\u0110\u00e3 xem',
                                     style: TextStyle(
-                                      color: Colors.grey.shade600,
+                                      color: AppColors.textHint,
                                       fontSize: 11,
                                     ),
                                   ),
@@ -334,8 +348,8 @@ class MessageBubble extends StatelessWidget {
                                   const SizedBox(width: 4),
                                   Text(
                                     '+${seenByAvatars.length - 5}',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade600,
+                                    style: const TextStyle(
+                                      color: AppColors.textHint,
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -345,8 +359,8 @@ class MessageBubble extends StatelessWidget {
                             )
                           : Text(
                               deliveryStatus ?? '',
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
+                              style: const TextStyle(
+                                color: AppColors.textHint,
                                 fontSize: 11,
                               ),
                             ),
