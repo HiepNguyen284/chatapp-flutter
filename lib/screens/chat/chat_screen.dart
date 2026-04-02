@@ -7,6 +7,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/app_theme.dart';
+
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/chat_rooms_provider.dart';
@@ -266,7 +268,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
           content: Text(
             isGroupDissolved
                 ? 'Nhóm đã bị giải tán. Đang quay về danh sách chat...'
-                : 'This conversation is no longer available.',
+                : 'Cuộc trò chuyện này không còn tồn tại.',
           ),
         ),
       );
@@ -334,8 +336,8 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
       final membersText = event.newMembers.join(', ');
       final addedBy = (event.addedBy ?? '').trim();
       final text = addedBy.isEmpty
-          ? '$membersText joined the group.'
-          : '$addedBy added $membersText.';
+          ? '$membersText đã tham gia nhóm.'
+          : '$addedBy đã thêm $membersText.';
 
       _showGroupMemberNotice(
         text: text,
@@ -356,15 +358,15 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
       final username = (event.removedUsername ?? '').trim();
       final actionBy = (event.actionBy ?? '').trim();
       final fallback = isLeft
-          ? 'A member left the group.'
-          : 'A member was removed from the group.';
+          ? 'Một thành viên đã rời nhóm.'
+          : 'Một thành viên đã bị xoá khỏi nhóm.';
       final text = username.isEmpty
           ? fallback
           : isLeft
-              ? '$username left the group.'
+              ? '$username đã rời nhóm.'
               : actionBy.isEmpty || actionBy == username
-                  ? '$username was removed from the group.'
-                  : '$actionBy removed $username from the group.';
+                  ? '$username đã bị xoá khỏi nhóm.'
+                  : '$actionBy đã xoá $username khỏi nhóm.';
 
       _showGroupMemberNotice(
         text: text,
@@ -678,14 +680,14 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
     }
 
     if (_blockedByMe && _blockedByPeer) {
-      return 'Both users blocked each other. Unblock to continue messaging.';
+      return 'Cả hai người đã chặn nhau. Bỏ chặn để tiếp tục nhắn tin.';
     }
 
     if (_blockedByMe) {
-      return 'You blocked this user. Unblock in People tab to continue messaging.';
+      return 'Bạn đã chặn người dùng này. Bỏ chặn trong tab Mọi người để tiếp tục nhắn tin.';
     }
 
-    return 'This user blocked you on Messenger.';
+    return 'Người dùng này đã chặn bạn.';
   }
 
   String? _presenceLabel() {
@@ -698,19 +700,19 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
     }
 
     if (_isPresenceLoading && _isPeerOnline == null) {
-      return 'Loading status...';
+      return 'Đang tải trạng thái...';
     }
 
     if (_isPeerOnline == true) {
-      return 'Online';
+      return 'Đang hoạt động';
     }
 
     final seenAt = _lastSeenAt;
     if (seenAt == null) {
-      return 'Offline';
+      return 'Ngoại tuyến';
     }
 
-    return 'Last seen ${_formatLastSeen(seenAt)}';
+    return 'Hoạt động lần cuối ${_formatLastSeen(seenAt)}';
   }
 
   String _formatLastSeen(DateTime value) {
@@ -719,7 +721,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
     final isToday =
         seenAt.year == now.year && seenAt.month == now.month && seenAt.day == now.day;
     if (isToday) {
-      return 'today at ${DateFormat('HH:mm').format(seenAt)}';
+      return 'hôm nay lúc ${DateFormat('HH:mm').format(seenAt)}';
     }
 
     final yesterday = now.subtract(const Duration(days: 1));
@@ -727,7 +729,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
         seenAt.month == yesterday.month &&
         seenAt.day == yesterday.day;
     if (isYesterday) {
-      return 'yesterday at ${DateFormat('HH:mm').format(seenAt)}';
+      return 'hôm qua lúc ${DateFormat('HH:mm').format(seenAt)}';
     }
 
     return DateFormat('dd/MM/yyyy HH:mm').format(seenAt);
@@ -768,7 +770,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
     }
 
     if (!sent) {
-      final error = context.read<ChatProvider>().error ?? 'Send failed';
+      final error = context.read<ChatProvider>().error ?? 'Gửi thất bại';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error)),
       );
@@ -986,47 +988,63 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
       context: context,
       builder: (sheetContext) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (canTranslate)
-                ListTile(
-                  leading: isTranslating
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.translate_rounded),
-                  title: Text(
-                    isTranslating
-                        ? 'Dang dich sang tieng Viet...'
-                        : translatedText == null
-                            ? 'Dich sang tieng Viet'
-                            : 'Dich lai sang tieng Viet',
-                  ),
-                  onTap: isTranslating
-                      ? null
-                      : () {
-                          Navigator.pop(sheetContext);
-                          unawaited(_translateMessage(
-                            message: message,
-                            messageIndex: messageIndex,
-                            messages: messages,
-                            forceRefresh: translatedText != null,
-                          ));
-                        },
-                ),
-              if (canDelete)
-                ListTile(
-                  leading: const Icon(Icons.delete_outline),
-                  title: const Text('Delete message'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _confirmRecall(messageId);
-                  },
-                ),
-            ],
+child: Column(
+  mainAxisSize: MainAxisSize.min,
+  children: [
+    if (canTranslate)
+      ListTile(
+        leading: isTranslating
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.translate_rounded),
+        title: Text(
+          isTranslating
+              ? 'Đang dịch sang tiếng Việt...'
+              : translatedText == null
+                  ? 'Dịch sang tiếng Việt'
+                  : 'Dịch lại sang tiếng Việt',
+        ),
+        onTap: isTranslating
+            ? null
+            : () {
+                Navigator.pop(sheetContext);
+                unawaited(_translateMessage(
+                  message: message,
+                  messageIndex: messageIndex,
+                  messages: messages,
+                  forceRefresh: translatedText != null,
+                ));
+              },
+      ),
+
+    if (canDelete)
+      ListTile(
+        leading: const Icon(Icons.delete_outline),
+        title: const Text('Xóa tin nhắn'),
+        onTap: () async {
+          Navigator.pop(sheetContext);
+
+          final deleted =
+              await context.read<ChatProvider>().recallMessage(
+                    messageId: messageId,
+                  );
+
+          if (!mounted) return;
+
+          if (!deleted) {
+            final error =
+                context.read<ChatProvider>().error ?? 'Xóa thất bại';
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(error)),
+            );
+          }
+        },
+      ),
+  ],
+),
           ),
         );
       },
@@ -1236,8 +1254,18 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
         actions: [
           if (isGroupRoom)
             IconButton(
+              icon: Image.asset('lib/assets/ai_summary_icon.png', width: 24, height: 24),
+              tooltip: 'Tóm tắt tin nhắn',
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Tính năng tóm tắt đang được phát triển')),
+                );
+              },
+            ),
+          if (isGroupRoom)
+            IconButton(
               icon: const Icon(Icons.group_outlined),
-              tooltip: 'Group members',
+              tooltip: 'Thành viên nhóm',
               onPressed: () async {
                 final navigator = Navigator.of(context);
                 final roomsProvider = context.read<ChatRoomsProvider>();
@@ -1444,7 +1472,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
             top: false,
             child: Container(
               padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
-              color: Colors.white,
+              color: AppColors.bgCard,
               child: Row(
                 children: [
                   IconButton(
@@ -1461,19 +1489,36 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                       maxLines: 5,
                       onChanged: _onTextChanged,
                       onSubmitted: (_) => _send(),
-                      decoration: const InputDecoration(
-                        hintText: 'Aa',
+                      style: const TextStyle(color: AppColors.textPrimary),
+                      decoration: InputDecoration(
+                        hintText: 'Nhập tin nhắn...',
+                        hintStyle: const TextStyle(color: AppColors.textSecondary),
                         isDense: true,
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        suffixIcon: Padding(
+                          padding: const EdgeInsets.all(10.0),
+                          child: Image.asset('lib/assets/emoij_icon.png', width: 22, height: 22),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.bgInput,
                       ),
                     ),
                   ),
                   const SizedBox(width: 6),
+                  IconButton(
+                    onPressed: () {},
+                    icon: Image.asset('lib/assets/microphone.png', width: 24, height: 24, color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(width: 2),
                   IconButton.filled(
                     onPressed: chat.isSending || _isMessagingBlocked ? null : _send,
                     style: IconButton.styleFrom(
                       backgroundColor: const Color(0xFF168AFF),
+                      padding: const EdgeInsets.all(10),
                     ),
                     icon: chat.isSending
                         ? const SizedBox(
@@ -1484,7 +1529,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                               color: Colors.white,
                             ),
                           )
-                        : const Icon(Icons.send_rounded),
+                        : const Icon(Icons.send_rounded, size: 20),
                   ),
                 ],
               ),
