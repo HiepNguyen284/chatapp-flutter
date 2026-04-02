@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 class AppConstants {
   static const String _baseUrlFromEnv = String.fromEnvironment(
     'API_BASE_URL',
@@ -7,16 +5,17 @@ class AppConstants {
   );
 
   static String get baseUrl {
-    if (_baseUrlFromEnv.isNotEmpty) {
-      return _baseUrlFromEnv;
+    final baseUrl = _baseUrlFromEnv.trim();
+    if (baseUrl.isNotEmpty) {
+      return baseUrl.endsWith('/')
+          ? baseUrl.substring(0, baseUrl.length - 1)
+          : baseUrl;
     }
 
-    // Chrome should call localhost directly; Android emulator uses 10.0.2.2.
-    if (kIsWeb) {
-      return 'http://localhost:8080';
-    }
-
-    return 'http://10.0.2.2:8080';
+    throw StateError(
+      'Missing API_BASE_URL. Create .env.json from .env.example.json and run '
+      'Flutter with --dart-define-from-file=.env.json.',
+    );
   }
 
   static const String accessTokenKey = 'access_token';
