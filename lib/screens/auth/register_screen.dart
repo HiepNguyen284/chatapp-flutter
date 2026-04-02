@@ -366,7 +366,7 @@ class _RegisterIconWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6366F1).withValues(alpha: 0.4),
+            color: const Color(0xFF6366F1).withOpacity(0.4),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),

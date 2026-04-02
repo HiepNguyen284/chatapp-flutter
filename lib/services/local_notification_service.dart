@@ -54,11 +54,6 @@ class LocalNotificationService {
       linux: LinuxInitializationSettings(
         defaultActionName: 'Open notification',
       ),
-      windows: WindowsInitializationSettings(
-        appName: 'Messenger App',
-        appUserModelId: 'AppChat.Messenger.App.1',
-        guid: 'd49b6e85-3a12-4c23-9ebc-4e9a3e4c4123',
-      ),
     );
 
     await _plugin.initialize(initializationSettings);
@@ -183,7 +178,6 @@ class LocalNotificationService {
         threadIdentifier: threadIdentifier,
       ),
       linux: const LinuxNotificationDetails(),
-      windows: const WindowsNotificationDetails(),
     );
 
     await _plugin.show(

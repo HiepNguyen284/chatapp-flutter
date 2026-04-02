@@ -11,6 +11,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
+import 'services/chatbot_service.dart';
 import 'services/chat_room_service.dart';
 import 'services/group_chat_service.dart';
 import 'services/invitation_service.dart';
@@ -102,6 +103,7 @@ class _SplashScreen extends StatelessWidget {
 List<SingleChildWidget> createAppProviders({
   required ApiClient apiClient,
   required AuthService authService,
+  required ChatbotService chatbotService,
   required ChatRoomService chatRoomService,
   required GroupChatService groupChatService,
   required UserService userService,
@@ -114,6 +116,7 @@ List<SingleChildWidget> createAppProviders({
   return [
     Provider.value(value: apiClient),
     Provider.value(value: authService),
+    Provider.value(value: chatbotService),
     Provider.value(value: chatRoomService),
     Provider.value(value: groupChatService),
     Provider.value(value: userService),

@@ -54,6 +54,32 @@ class ApiClient {
     );
   }
 
+  Future<http.StreamedResponse> postJsonStream(
+    String path,
+    Map<String, dynamic> body, {
+    Map<String, dynamic>? query,
+    bool authRequired = true,
+    String accept = 'text/event-stream',
+  }) async {
+    Future<http.StreamedResponse> execute() async {
+      final request = http.Request('POST', _uri(path, query));
+      request.headers.addAll(
+        await _buildHeaders(authRequired: authRequired),
+      );
+      request.headers['Accept'] = accept;
+      request.body = jsonEncode(body);
+      return _httpClient.send(request);
+    }
+
+    var response = await execute();
+
+    if (authRequired && response.statusCode == 401 && await _refreshToken()) {
+      response = await execute();
+    }
+
+    return response;
+  }
+
   Future<http.Response> patchJson(
     String path,
     Map<String, dynamic> body, {

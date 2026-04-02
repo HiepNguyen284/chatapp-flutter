@@ -40,8 +40,8 @@ class ChatRoomTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        splashColor: AppColors.primary.withValues(alpha: 0.08),
-        highlightColor: AppColors.bgInput.withValues(alpha: 0.5),
+        splashColor: AppColors.primary.withOpacity(0.08),
+        highlightColor: AppColors.bgInput.withOpacity(0.5),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(

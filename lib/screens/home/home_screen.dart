@@ -9,9 +9,9 @@ import '../../providers/chat_rooms_provider.dart';
 import '../../providers/invitation_provider.dart';
 import '../../providers/user_search_provider.dart';
 import '../../services/realtime_service.dart';
-import '../chat/ai_chat_screen.dart';
 import 'add_friend_screen.dart';
 import 'chat_list_screen.dart';
+import 'chatbot_screen.dart';
 import 'create_group_screen.dart';
 import 'invitations_screen.dart';
 import 'people_screen.dart';
@@ -35,7 +35,6 @@ class _HomeScreenState extends State<HomeScreen> {
     PeopleScreen(),
     InvitationsScreen(),
   ];
-
   @override
   void initState() {
     super.initState();
@@ -108,7 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (index == 1) {
       // AI Chat tab
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const AiChatScreen()),
+        MaterialPageRoute(builder: (_) => const ChatbotScreen()),
       );
       return;
     }
@@ -133,7 +132,7 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const AiChatScreen()),
+            MaterialPageRoute(builder: (_) => const ChatbotScreen()),
           );
         },
         backgroundColor: Colors.transparent,
