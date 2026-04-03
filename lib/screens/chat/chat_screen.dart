@@ -1165,7 +1165,11 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
           messageId: messageId,
         );
 
-    if (!mounted || deleted) {
+    if (!mounted) {
+      return;
+    }
+
+    if (deleted) {
       return;
     }
 
@@ -1260,21 +1264,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                   title: const Text('Xóa tin nhắn'),
                   onTap: () async {
                     Navigator.pop(sheetContext);
-
-                    final deleted =
-                        await context.read<ChatProvider>().recallMessage(
-                              messageId: messageId,
-                            );
-
-                    if (!mounted) return;
-
-                    if (!deleted) {
-                      final error =
-                          context.read<ChatProvider>().error ?? 'Xóa thất bại';
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(error)),
-                      );
-                    }
+                    _confirmRecall(messageId);
                   },
                 ),
             ],
@@ -1818,7 +1808,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                       height: 40,
                       decoration: BoxDecoration(
                         color: _isVoiceRecording
-                            ? AppColors.primary.withOpacity(0.2)
+                            ? AppColors.primary.withValues(alpha: 0.2)
                             : AppColors.bgInput,
                         shape: BoxShape.circle,
                         border: Border.all(

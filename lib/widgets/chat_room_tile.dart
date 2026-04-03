@@ -40,8 +40,8 @@ class ChatRoomTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        splashColor: AppColors.primary.withOpacity(0.08),
-        highlightColor: AppColors.bgInput.withOpacity(0.5),
+        splashColor: AppColors.primary.withValues(alpha: 0.08),
+        highlightColor: AppColors.bgInput.withValues(alpha: 0.5),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(
@@ -155,7 +155,15 @@ class ChatRoomTile extends StatelessWidget {
     if (diff == 0) return DateFormat('HH:mm').format(dt);
     if (diff == 1) return 'Hôm qua';
     if (diff < 7) {
-      const days = ['CN', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+      const days = [
+        'CN',
+        'Thứ Hai',
+        'Thứ Ba',
+        'Thứ Tư',
+        'Thứ Năm',
+        'Thứ Sáu',
+        'Thứ Bảy'
+      ];
       return days[dt.weekday % 7];
     }
     return DateFormat('dd/MM').format(dt);
