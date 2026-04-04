@@ -25,6 +25,7 @@ class MessageBubble extends StatelessWidget {
     required this.onLongPress,
     this.deliveryStatus,
     this.translatedText,
+    this.translatedLanguageLabel,
     this.isTranslating = false,
     this.seenByAvatars = const [],
     this.senderName,
@@ -40,6 +41,7 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback onLongPress;
   final String? deliveryStatus;
   final String? translatedText;
+  final String? translatedLanguageLabel;
   final bool isTranslating;
   final List<SeenAvatarInfo> seenByAvatars;
   final String? senderName;
@@ -98,6 +100,12 @@ class MessageBubble extends StatelessWidget {
     final hasVisibleImages = imageUrls.isNotEmpty;
     final normalizedTranslatedText = (translatedText ?? '').trim();
     final hasTranslatedText = normalizedTranslatedText.isNotEmpty;
+    final languageLabel = (translatedLanguageLabel ?? '').trim();
+    final translatingStatus = languageLabel.isEmpty
+      ? 'Dang dich...'
+      : 'Dang dich sang $languageLabel...';
+    final translatedTitle =
+      languageLabel.isEmpty ? 'Ban dich' : 'Ban dich ($languageLabel)';
     final senderLabel = (senderName ?? '').trim().isEmpty
         ? (message.sender ?? 'User')
         : senderName!.trim();
@@ -246,7 +254,7 @@ class MessageBubble extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
-                                  'Dang dich sang tieng Viet...',
+                                  translatingStatus,
                                   style: TextStyle(
                                     color: isMine
                                         ? Colors.white70
@@ -283,7 +291,7 @@ class MessageBubble extends StatelessWidget {
                                     : CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Ban dich tieng Viet',
+                                    translatedTitle,
                                     style: TextStyle(
                                       color: isMine
                                           ? Colors.white70

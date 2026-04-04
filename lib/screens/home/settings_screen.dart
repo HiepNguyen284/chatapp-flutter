@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_theme.dart';
 import '../../models/language_option.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/translation_preferences_service.dart';
 import '../../widgets/app_avatar.dart';
 import '../auth/login_screen.dart';
 import 'profile_screen.dart';
@@ -20,6 +23,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _autoTranslate = false;
   bool _smartSummary = false;
   bool _readReceipts = true;
+  final _translationPreferencesService = TranslationPreferencesService();
+  String _translationTargetLanguageCode =
+      TranslationPreferencesService.defaultTargetLanguage;
+  bool _isTranslationLanguageLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadTranslationTargetLanguage());
+  }
+
+  Future<void> _loadTranslationTargetLanguage() async {
+    final code = await _translationPreferencesService.getTargetLanguage();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _translationTargetLanguageCode = code;
+      _isTranslationLanguageLoading = false;
+    });
+  }
 
   Future<void> _confirmLogout() async {
     final confirmed = await showDialog<bool>(
@@ -79,10 +104,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _pickTranslationLanguage() async {
+    final current = LanguageOption.findByCode(_translationTargetLanguageCode);
+
+    final result = await showModalBottomSheet<LanguageOption>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => _LanguagePickerSheet(current: current),
+    );
+
+    if (result == null || !mounted) {
+      return;
+    }
+
+    await _translationPreferencesService.setTargetLanguage(result.code);
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _translationTargetLanguageCode = result.code;
+      _isTranslationLanguageLoading = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final lang = LanguageOption.findByCode(auth.profile?.language);
+    final translationLang =
+        LanguageOption.findByCode(_translationTargetLanguageCode) ??
+            LanguageOption.findByCode(
+              TranslationPreferencesService.defaultTargetLanguage,
+            );
 
     return Scaffold(
       backgroundColor: AppColors.bgDark,
@@ -113,6 +171,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: 'Dịch tin nhắn tức thì',
               value: _autoTranslate,
               onChanged: (v) => setState(() => _autoTranslate = v),
+            ),
+            _buildDivider(),
+            _buildNavTile(
+              icon: Icons.language_rounded,
+              title: 'Ngôn ngữ dịch tin nhắn',
+              subtitle: 'Chọn ngôn ngữ đích khi dịch',
+              trailing: _isTranslationLanguageLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : translationLang != null
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              translationLang.flagEmoji,
+                              style: const TextStyle(fontSize: 18),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              translationLang.nativeName,
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              color: AppColors.textSecondary,
+                              size: 18,
+                            ),
+                          ],
+                        )
+                      : null,
+              onTap: _pickTranslationLanguage,
             ),
             _buildDivider(),
             _buildToggleTile(

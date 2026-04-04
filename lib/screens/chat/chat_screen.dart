@@ -11,6 +11,7 @@ import 'package:record/record.dart';
 
 import '../../core/app_theme.dart';
 
+import '../../models/language_option.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/chat_rooms_provider.dart';
@@ -171,6 +172,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _scheduleReadSync();
+      unawaited(context.read<ChatProvider>().refreshTranslationTargetLanguage());
     }
   }
 
@@ -1241,6 +1243,11 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
     final chat = context.read<ChatProvider>();
     final translatedText = chat.translatedTextForMessage(messageId);
     final isTranslating = chat.isTranslatingMessage(messageId);
+    final targetLanguage =
+        LanguageOption.findByCode(chat.translationTargetLanguageCode);
+    final targetLanguageLabel =
+        (targetLanguage?.nativeName ?? targetLanguage?.name ?? 'ngon ngu da chon')
+            .trim();
 
     showModalBottomSheet<void>(
       context: context,
@@ -1260,10 +1267,10 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                       : const Icon(Icons.translate_rounded),
                   title: Text(
                     isTranslating
-                        ? 'Đang dịch sang tiếng Việt...'
+                        ? 'Đang dịch sang $targetLanguageLabel...'
                         : translatedText == null
-                            ? 'Dịch sang tiếng Việt'
-                            : 'Dịch lại sang tiếng Việt',
+                            ? 'Dịch sang $targetLanguageLabel'
+                            : 'Dịch lại sang $targetLanguageLabel',
                   ),
                   onTap: isTranslating
                       ? null
@@ -1304,6 +1311,13 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
         : null;
     final isOnline = _isPeerOnline == true;
     final messages = chat.messages;
+    final translationLanguage =
+      LanguageOption.findByCode(chat.translationTargetLanguageCode);
+    final translationLanguageLabel =
+      (translationLanguage?.nativeName ??
+          translationLanguage?.name ??
+          chat.translationTargetLanguageCode.toUpperCase())
+        .trim();
     final isGroupRoom =
         widget.peerUsername == null || widget.peerUsername!.isEmpty;
     final voiceStatusLabel = _isVoiceRecording
@@ -1634,6 +1648,7 @@ class _ChatViewState extends State<_ChatView> with WidgetsBindingObserver {
                         isMine: isMine,
                         deliveryStatus: deliveryStatus,
                         translatedText: translatedText,
+                        translatedLanguageLabel: translationLanguageLabel,
                         isTranslating: isTranslating,
                         seenByAvatars: seenByAvatars,
                         senderName:

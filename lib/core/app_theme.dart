@@ -33,8 +33,6 @@ class AppColors {
 }
 
 class AppTheme {
-  static const appFontFamily = 'Times New Roman';
-
   static ThemeData get dark {
     final baseTextTheme = ThemeData(
       useMaterial3: true,
@@ -44,13 +42,11 @@ class AppTheme {
     final appTextTheme = baseTextTheme.apply(
       bodyColor: AppColors.textPrimary,
       displayColor: AppColors.textPrimary,
-      fontFamily: appFontFamily,
     );
 
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      fontFamily: appFontFamily,
       textTheme: appTextTheme,
       primaryTextTheme: appTextTheme,
       colorScheme: const ColorScheme.dark(

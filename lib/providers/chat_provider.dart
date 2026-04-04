@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/message_receive_model.dart';
 import '../services/message_service.dart';
 import '../services/realtime_service.dart';
+import '../services/translation_preferences_service.dart';
 
 class ChatProvider extends ChangeNotifier {
   ChatProvider({
@@ -22,6 +23,8 @@ class ChatProvider extends ChangeNotifier {
 
   final MessageService _messageService;
   final RealtimeService _realtimeService;
+  final TranslationPreferencesService _translationPreferencesService =
+      TranslationPreferencesService();
   final int _roomId;
   final String? _currentUsername;
   static const int _maxPersistedTranslations = 500;
@@ -34,10 +37,12 @@ class ChatProvider extends ChangeNotifier {
   bool _isSummarizing = false;
   String? _error;
   List<MessageReceiveModel> _messages = const [];
-  final Map<int, String> _translatedByMessageId = {};
+  final Map<int, _PersistedTranslation> _translatedByMessageId = {};
   final Set<int> _translatingMessageIds = {};
   final Map<int, _PersistedTranslation> _persistedTranslations = {};
   bool _isPersistedTranslationsLoaded = false;
+  String _translationTargetLanguageCode =
+      TranslationPreferencesService.defaultTargetLanguage;
 
   bool get isLoading => _isLoading;
   bool get isSending => _isSending;
@@ -45,13 +50,14 @@ class ChatProvider extends ChangeNotifier {
   bool get isSummarizing => _isSummarizing;
   String? get error => _error;
   List<MessageReceiveModel> get messages => _messages;
+  String get translationTargetLanguageCode => _translationTargetLanguageCode;
 
   String? translatedTextForMessage(int? messageId) {
     if (messageId == null) {
       return null;
     }
 
-    return _translatedByMessageId[messageId];
+    return _translatedByMessageId[messageId]?.translatedText;
   }
 
   bool isTranslatingMessage(int? messageId) {
@@ -71,6 +77,7 @@ class ChatProvider extends ChangeNotifier {
       final loaded = await _messageService.listMessages(roomId: _roomId);
       _messages = _sortBySentOn(loaded);
       await _loadPersistedTranslations();
+      await _loadTranslationTargetLanguage();
       await _restoreTranslationsForCurrentMessages();
       _pruneTranslationState();
       await _emitReadStatus();
@@ -200,8 +207,17 @@ class ChatProvider extends ChangeNotifier {
       return false;
     }
 
-    final cached = (_translatedByMessageId[messageId] ?? '').trim();
-    if (!forceRefresh && cached.isNotEmpty) {
+    final languageChanged = await _loadTranslationTargetLanguage();
+    if (languageChanged) {
+      await _restoreTranslationsForCurrentMessages();
+    }
+
+    final targetLanguage = _translationTargetLanguageCode;
+    final cached = _translatedByMessageId[messageId];
+    if (!forceRefresh &&
+        cached != null &&
+        cached.targetLanguage == targetLanguage &&
+        cached.translatedText.trim().isNotEmpty) {
       return true;
     }
 
@@ -210,8 +226,9 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await _messageService.translateMessageToVietnamese(
+      final result = await _messageService.translateMessage(
         text: normalizedText,
+        targetLanguage: targetLanguage,
         previousMessages: previousMessages,
       );
       final translatedText = result.translatedText.trim();
@@ -220,11 +237,13 @@ class ChatProvider extends ChangeNotifier {
         return false;
       }
 
-      _translatedByMessageId[messageId] = translatedText;
-      _persistedTranslations[messageId] = _PersistedTranslation(
+      final persisted = _PersistedTranslation(
         originalText: normalizedText,
         translatedText: translatedText,
+        targetLanguage: targetLanguage,
       );
+      _translatedByMessageId[messageId] = persisted;
+      _persistedTranslations[messageId] = persisted;
       await _savePersistedTranslations();
       return true;
     } catch (e) {
@@ -278,12 +297,33 @@ class ChatProvider extends ChangeNotifier {
     await _emitReadStatus();
   }
 
+  Future<void> refreshTranslationTargetLanguage() async {
+    final changed = await _loadTranslationTargetLanguage();
+    if (!changed) {
+      return;
+    }
+
+    await _restoreTranslationsForCurrentMessages();
+    _pruneTranslationState();
+    notifyListeners();
+  }
+
   Future<void> _emitReadStatus() async {
     try {
       await _messageService.setReadStatus(roomId: _roomId);
     } catch (_) {
       // Read receipts are best-effort and should not interrupt chat.
     }
+  }
+
+  Future<bool> _loadTranslationTargetLanguage() async {
+    final code = await _translationPreferencesService.getTargetLanguage();
+    if (code == _translationTargetLanguageCode) {
+      return false;
+    }
+
+    _translationTargetLanguageCode = code;
+    return true;
   }
 
   String get _persistedTranslationsKey {
@@ -320,6 +360,8 @@ class ChatProvider extends ChangeNotifier {
         final originalText = (value['originalText'] ?? '').toString().trim();
         final translatedText =
             (value['translatedText'] ?? '').toString().trim();
+        final targetLanguage = _translationPreferencesService
+            .normalizeTargetLanguage((value['targetLanguage'] ?? '').toString());
         if (originalText.isEmpty || translatedText.isEmpty) {
           return;
         }
@@ -327,6 +369,7 @@ class ChatProvider extends ChangeNotifier {
         loaded[id] = _PersistedTranslation(
           originalText: originalText,
           translatedText: translatedText,
+          targetLanguage: targetLanguage,
         );
       });
 
@@ -360,7 +403,11 @@ class ChatProvider extends ChangeNotifier {
         continue;
       }
 
-      _translatedByMessageId[id] = persisted.translatedText;
+      if (persisted.targetLanguage != _translationTargetLanguageCode) {
+        continue;
+      }
+
+      _translatedByMessageId[id] = persisted;
     }
 
     if (changed) {
@@ -385,6 +432,7 @@ class ChatProvider extends ChangeNotifier {
         encoded[id.toString()] = {
           'originalText': persisted.originalText,
           'translatedText': persisted.translatedText,
+          'targetLanguage': persisted.targetLanguage,
         };
       });
 
@@ -489,8 +537,10 @@ class _PersistedTranslation {
   const _PersistedTranslation({
     required this.originalText,
     required this.translatedText,
+    required this.targetLanguage,
   });
 
   final String originalText;
   final String translatedText;
+  final String targetLanguage;
 }

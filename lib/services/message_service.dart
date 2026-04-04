@@ -218,8 +218,9 @@ class MessageService {
     }
   }
 
-  Future<MessageTranslationModel> translateMessageToVietnamese({
+  Future<MessageTranslationModel> translateMessage({
     required String text,
+    required String targetLanguage,
     String sourceLanguage = 'auto',
     List<String> previousMessages = const [],
   }) async {
@@ -232,12 +233,13 @@ class MessageService {
         .map((item) => item.trim())
         .where((item) => item.isNotEmpty)
         .toList(growable: false);
+    final normalizedTargetLanguage = _normalizeTargetLanguage(targetLanguage);
 
     final response = await _apiClient.postJson(
       '/api/v1/messages/translate',
       {
         'text': normalizedText,
-        'targetLanguage': 'vi',
+        'targetLanguage': normalizedTargetLanguage,
         'sourceLanguage': sourceLanguage,
         if (normalizedContext.isNotEmpty) 'previousMessages': normalizedContext,
       },
@@ -253,6 +255,15 @@ class MessageService {
     }
 
     return MessageTranslationModel.fromJson(body);
+  }
+
+  String _normalizeTargetLanguage(String language) {
+    final normalized = language.trim().toLowerCase().replaceAll('_', '-');
+    if (normalized.isEmpty) {
+      return 'vi';
+    }
+
+    return normalized.split('-').first;
   }
 
   Future<MessageSummaryModel> summarizeRecentMessages({
