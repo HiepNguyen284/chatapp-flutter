@@ -913,4 +913,11 @@ class RealtimeService {
       },
     );
   }
+
+  void sendAppPresence({required bool active}) {
+    _client?.send(
+      destination: '/app/app-presence',
+      body: jsonEncode({'active': active}),
+    );
+  }
 }

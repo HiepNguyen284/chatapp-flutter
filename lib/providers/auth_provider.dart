@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../models/user_credentials.dart';
 import '../models/user_with_avatar_model.dart';
 import '../services/auth_service.dart';
+import '../services/firebase_messaging_service.dart';
 import '../services/realtime_service.dart';
 import '../services/token_storage_service.dart';
 import '../services/user_service.dart';
@@ -14,15 +15,18 @@ class AuthProvider extends ChangeNotifier {
     required RealtimeService realtimeService,
     required TokenStorageService tokenStorage,
     required UserService userService,
+    FirebaseMessagingService? firebaseMessagingService,
   })  : _authService = authService,
         _realtimeService = realtimeService,
         _tokenStorage = tokenStorage,
-        _userService = userService;
+        _userService = userService,
+        _firebaseMessagingService = firebaseMessagingService;
 
   final AuthService _authService;
   final RealtimeService _realtimeService;
   final TokenStorageService _tokenStorage;
   final UserService _userService;
+  final FirebaseMessagingService? _firebaseMessagingService;
 
   bool _isLoading = false;
   bool _isAuthenticated = false;
@@ -79,6 +83,7 @@ class AuthProvider extends ChangeNotifier {
       _username = username;
       await _loadMyProfile();
       _isAuthenticated = true;
+      await _firebaseMessagingService?.initialize();
       return true;
     } catch (e) {
       _error = e.toString();
@@ -153,7 +158,9 @@ class AuthProvider extends ChangeNotifier {
 
   void applyProfileRealtime(UserWithAvatarModel profile) {
     final eventUsername = profile.username;
-    if (eventUsername == null || eventUsername.isEmpty || eventUsername != _username) {
+    if (eventUsername == null ||
+        eventUsername.isEmpty ||
+        eventUsername != _username) {
       return;
     }
 

@@ -1,20 +1,37 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'app.dart';
+import 'firebase_init_stub.dart'
+    if (dart.library.io) 'firebase_init_native.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/chatbot_service.dart';
 import 'services/chat_room_service.dart';
 import 'services/group_chat_service.dart';
 import 'services/invitation_service.dart';
+import 'services/local_notification_service.dart';
 import 'services/message_service.dart';
 import 'services/realtime_service.dart';
 import 'services/token_storage_service.dart';
 import 'services/unread_state_service.dart';
 import 'services/user_service.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  if (!kIsWeb) {
+    try {
+      await initFirebase();
+    } catch (e) {
+      debugPrint('Firebase initialization failed: $e');
+    }
+  }
+
+  final localNotificationService = LocalNotificationService();
+  await localNotificationService.requestPermissions();
+
   final tokenStorage = TokenStorageService();
   final apiClient = ApiClient(tokenStorage: tokenStorage);
 
@@ -42,6 +59,7 @@ void main() {
         realtimeService: realtimeService,
         unreadStateService: unreadStateService,
         tokenStorage: tokenStorage,
+        localNotificationService: localNotificationService,
       ),
       child: const MessengerApp(),
     ),
