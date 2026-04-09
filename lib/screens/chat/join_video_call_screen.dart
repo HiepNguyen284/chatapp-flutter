@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
-import '../core/agora_config.dart';
-import '../core/app_constants.dart';
-import '../providers/video_call_provider.dart';
+import '../../core/agora_config.dart';
+import '../../providers/video_call_provider.dart';
 import 'video_call_screen.dart';
 
 class JoinVideoCallScreen extends StatefulWidget {

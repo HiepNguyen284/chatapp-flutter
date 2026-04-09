@@ -1,5 +1,5 @@
 /// Agora configuration constants
-/// 
+///
 /// To get your Agora App ID:
 /// 1. Go to https://console.agora.io/
 /// 2. Create an account and create a new project
@@ -7,7 +7,7 @@
 class AgoraConfig {
   /// Your Agora App ID
   /// Replace this with your actual Agora App ID from https://console.agora.io/
-  static const String appId = 'e87bb2aeeb484976a55d554766cd705c';
+  static const String appId = 'a8df17689d14430fb9852268d3f8cf6e';
 
   /// Token for authentication (optional for testing)
   /// For production, you should generate tokens from your server

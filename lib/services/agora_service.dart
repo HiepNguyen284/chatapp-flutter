@@ -54,15 +54,10 @@ class AgoraService {
 
       // Join channel
       await _agoraRtcEngine.joinChannel(
-        token: token,
+        token: token ?? '',
         channelId: channelName,
         uid: uid,
-        options: const RtcChannelMediaOptions(
-          autoSubscribeAudio: true,
-          autoSubscribeVideo: true,
-          publishLocalAudio: true,
-          publishLocalVideo: true,
-        ),
+        options: const ChannelMediaOptions(),
       );
 
       _logInfo('Initializing Agora for channel: $channelName');
