@@ -31,6 +31,35 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   Timer? _timerTick;
   String _elapsedLabel = '00:00';
   StreamSubscription<VideoCallRejectedEvent>? _rejectedSub;
+  late VideoCallProvider _videoProvider;
+  bool _hasRemoteUserJoined = false;
+  bool _isEndingCall = false;
+
+  void _onProviderChanged() {
+    if (!mounted) return;
+    
+    if (_videoProvider.remoteUsers.isNotEmpty && !_hasRemoteUserJoined) {
+      _hasRemoteUserJoined = true;
+    }
+    
+    // If someone had joined but now the room is empty (only local user left)
+    if (_hasRemoteUserJoined && _videoProvider.remoteUsers.isEmpty) {
+      _endCallAndPop();
+    }
+  }
+
+  String _formatLog(String log) {
+    if (log.contains('Remote user joined:')) {
+      return 'user joined: ${widget.roomName}';
+    }
+    if (log.contains('Remote user offline:')) {
+      return 'user offline: ${widget.roomName}';
+    }
+    if (log.contains('Remote user') && log.contains('muted')) {
+      return log.replaceAll(RegExp(r'Remote user \d+'), widget.roomName);
+    }
+    return log;
+  }
 
   @override
   void initState() {
@@ -44,6 +73,9 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
       setState(() => _elapsedLabel = '$m:$s');
     });
 
+    _videoProvider = context.read<VideoCallProvider>();
+    _videoProvider.addListener(_onProviderChanged);
+
     // Only the caller needs to hear about rejections
     if (widget.isCaller) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -52,11 +84,12 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('${event.rejectedBy} đã từ chối cuộc gọi của bạn'),
+              content: Text('${event.rejectedByUsername} đã từ chối cuộc gọi của bạn'),
               backgroundColor: Colors.red.shade700,
               duration: const Duration(seconds: 4),
             ),
           );
+          _endCallAndPop(isRejected: true);
         });
       });
     }
@@ -64,6 +97,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
 
   @override
   void dispose() {
+    _videoProvider.removeListener(_onProviderChanged);
     _rejectedSub?.cancel();
     _timerTick?.cancel();
     _callTimer.stop();
@@ -71,7 +105,10 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     super.dispose();
   }
 
-  Future<void> _endCallAndPop() async {
+  Future<void> _endCallAndPop({bool isRejected = false}) async {
+    if (_isEndingCall) return;
+    _isEndingCall = true;
+
     final provider = context.read<VideoCallProvider>();
     final messageService = context.read<MessageService>();
     final elapsed = _callTimer.elapsed;
@@ -86,7 +123,9 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
       try {
         await messageService.sendMessage(
           roomId: widget.roomId,
-          text: '📞 Cuộc gọi video đã kết thúc · $durationLabel',
+          text: isRejected 
+            ? '📞 Cuộc gọi đã bị từ chối' 
+            : '📞 Cuộc gọi video đã kết thúc · $durationLabel',
         );
       } catch (_) {}
     }
@@ -94,83 +133,252 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  Widget _buildVideoView(int uid) {
-    final provider = context.read<VideoCallProvider>();
-    final isLocal = uid == 0;
-    final rtcEngine = provider.agoraService.engine;
-    final channelName = provider.channelName;
+  // Draggable offset for the remote (receiver) pip overlay
+  Offset _pipOffset = const Offset(16, -180);
 
+  Widget _buildAvatarPlaceholder(String name, {bool isLoading = false}) {
     return Container(
-      color: Colors.black,
-      child: AgoraVideoView(
-        controller: isLocal
-            ? VideoViewController(
-                rtcEngine: rtcEngine,
-                canvas: const VideoCanvas(uid: 0),
+      color: Colors.grey[900],
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: 40,
+              backgroundColor: Colors.blueGrey,
+              child: const Icon(Icons.person, size: 40, color: Colors.white70),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              name,
+              style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 16),
+            if (isLoading)
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2),
               )
-            : VideoViewController.remote(
-                rtcEngine: rtcEngine,
-                canvas: VideoCanvas(uid: uid),
-                connection: RtcConnection(channelId: channelName),
-              ),
+            else
+              const Icon(Icons.mic_off, color: Colors.white54, size: 24),
+          ],
+        ),
       ),
     );
   }
 
-  List<Widget> _getRenderViews() {
-    final provider = context.watch<VideoCallProvider>();
-    final List<Widget> list = [_buildVideoView(0)];
-    for (final uid in provider.remoteUsers) {
-      list.add(_buildVideoView(uid));
-    }
-    return list;
-  }
-
-  Widget _videoView(Widget view) {
-    return Expanded(
-      child: Container(color: Colors.black, child: view),
+  Widget _buildLocalVideoView() {
+    final provider = context.read<VideoCallProvider>();
+    final rtcEngine = provider.agoraService.engine;
+    
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _buildAvatarPlaceholder("You", isLoading: provider.isCameraOff == false),
+        if (!provider.isCameraOff)
+          AgoraVideoView(
+            controller: VideoViewController(
+              rtcEngine: rtcEngine,
+              canvas: const VideoCanvas(uid: 0),
+            ),
+          ),
+      ],
     );
   }
 
-  Widget _expandedVideoRow(List<Widget> views) {
-    return Expanded(
-      child: Row(children: views.map(_videoView).toList()),
+  Widget _buildRemoteVideoView(int uid) {
+    final provider = context.read<VideoCallProvider>();
+    final rtcEngine = provider.agoraService.engine;
+    final channelName = provider.channelName;
+    final isActive = provider.isRemoteVideoActive(uid);
+
+    final isGroup = provider.remoteUsers.length > 1;
+    final nameToDisplay = (!isGroup && widget.roomName.isNotEmpty) ? widget.roomName : "User $uid";
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (!isActive)
+          _buildAvatarPlaceholder(nameToDisplay, isLoading: true),
+        if (isActive)
+          AgoraVideoView(
+            controller: VideoViewController.remote(
+              rtcEngine: rtcEngine,
+              canvas: VideoCanvas(uid: uid),
+              connection: RtcConnection(channelId: channelName),
+            ),
+          ),
+      ],
     );
   }
 
-  Widget _viewRows(List<Widget> views) {
-    switch (views.length) {
-      case 1:
-        return Container(
-          color: Colors.black,
-          child: Column(children: [_videoView(views[0])]),
+  /// Builds the Messenger-style video layout for 1-on-1 calls.
+  /// - Remote video (receiver): fills the entire screen (when joined).
+  /// - Local video (caller): small draggable PiP overlay.
+  Widget _buildMessengerLayout() {
+    return Consumer<VideoCallProvider>(
+      builder: (context, provider, _) {
+        final remoteUsers = provider.remoteUsers;
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // ── Full-screen video ──────────────────────────
+            if (remoteUsers.isNotEmpty)
+              _buildRemoteVideoView(remoteUsers.first)
+            else
+              _buildLocalVideoView(),
+
+            // ── Local PiP overlay (only when someone joined) ───
+            if (remoteUsers.isNotEmpty)
+              Positioned(
+                left: _pipOffset.dx < 0 ? 0 : null,
+                right: _pipOffset.dx < 0 ? null : 0,
+                bottom: () {
+                  final raw = -_pipOffset.dy;
+                  return raw < 16 ? 16.0 : raw;
+                }(),
+                child: GestureDetector(
+                  onPanUpdate: (details) {
+                    setState(() {
+                      _pipOffset = Offset(
+                        _pipOffset.dx + details.delta.dx,
+                        _pipOffset.dy + details.delta.dy,
+                      );
+                    });
+                  },
+                  child: Container(
+                    width: 120,
+                    height: 180,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withOpacity(0.6), width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.5),
+                          blurRadius: 12,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    clipBehavior: Clip.hardEdge,
+                    child: _buildLocalVideoView(),
+                  ),
+                ),
+              ),
+
+            // ── Waiting overlay when no remote user yet ───────────
+            if (remoteUsers.isEmpty)
+              Positioned(
+                bottom: 160,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white70,
+                            strokeWidth: 2.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          widget.isCaller ? 'Đang chờ người nhận...' : 'Đang kết nối...',
+                          style: const TextStyle(color: Colors.white70, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
         );
-      case 2:
-        return Container(
+      },
+    );
+  }
+
+  Widget _videoGridCell(Widget view) {
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.all(2),
+        clipBehavior: Clip.hardEdge,
+        decoration: BoxDecoration(
           color: Colors.black,
-          child: Column(children: [
-            _expandedVideoRow([views[0]]),
-            _expandedVideoRow([views[1]]),
-          ]),
-        );
-      case 3:
-        return Container(
-          color: Colors.black,
-          child: Column(children: [
-            _expandedVideoRow(views.sublist(0, 2)),
-            _expandedVideoRow(views.sublist(2, 3)),
-          ]),
-        );
-      default:
-        // 4+ participants: 2 rows of 2
-        return Container(
-          color: Colors.black,
-          child: Column(children: [
-            _expandedVideoRow(views.sublist(0, 2)),
-            _expandedVideoRow(views.sublist(2, views.length > 4 ? 4 : views.length)),
-          ]),
-        );
-    }
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: view,
+      ),
+    );
+  }
+
+  Widget _gridRow(List<Widget> views) {
+    return Expanded(
+      child: Row(children: views.map(_videoGridCell).toList()),
+    );
+  }
+
+  /// Builds a grid layout for group calls (more than 1 remote user)
+  Widget _buildGridLayout() {
+    return Consumer<VideoCallProvider>(
+      builder: (context, provider, _) {
+        final List<Widget> views = [_buildLocalVideoView()];
+        for (final uid in provider.remoteUsers) {
+          views.add(_buildRemoteVideoView(uid));
+        }
+
+        switch (views.length) {
+          case 1:
+            return Column(children: [_videoGridCell(views[0])]);
+          case 2:
+            return Column(children: [
+              _gridRow([views[0]]),
+              _gridRow([views[1]]),
+            ]);
+          case 3:
+            return Column(children: [
+              _gridRow(views.sublist(0, 2)),
+              _gridRow(views.sublist(2, 3)),
+            ]);
+          case 4:
+            return Column(children: [
+              _gridRow(views.sublist(0, 2)),
+              _gridRow(views.sublist(2, 4)),
+            ]);
+          default:
+            // 5 or more participants
+            return Column(children: [
+              _gridRow(views.sublist(0, 2)),
+              _gridRow(views.sublist(2, 4)),
+              if (views.length > 4)
+                _gridRow(views.sublist(4, views.length > 6 ? 6 : views.length)),
+            ]);
+        }
+      },
+    );
+  }
+
+  Widget _buildActiveLayout() {
+    return Consumer<VideoCallProvider>(
+      builder: (context, provider, _) {
+        // Use Grid for Group Chat, otherwise Messenger Layout
+        if (provider.remoteUsers.length > 1) {
+          return _buildGridLayout();
+        } else {
+          return _buildMessengerLayout();
+        }
+      },
+    );
   }
 
   Widget _infoPanel() {
@@ -206,7 +414,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                 controller: _infoScrollController,
                 child: Text(
                   provider.agoraService.infoStrings.isNotEmpty
-                      ? provider.agoraService.infoStrings.join('\n')
+                      ? provider.agoraService.infoStrings.map(_formatLog).join('\n')
                       : 'No events yet',
                   style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
@@ -328,16 +536,12 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
           ),
         ),
         body: Stack(
+          fit: StackFit.expand,
           children: [
-            // Video grid – rebuild when remoteUsers changes
-            Consumer<VideoCallProvider>(
-              builder: (context, _, __) {
-                final views = _getRenderViews();
-                return _viewRows(views);
-              },
-            ),
+            // ── Dynamic layout: Grid for group, Messenger for 1-on-1 ──
+            _buildActiveLayout(),
 
-            // Info panel
+            // ── Info panel ───────────────────────────────────────────────
             if (_showInfoPanel)
               Positioned(
                 bottom: 120,
@@ -346,10 +550,10 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                 child: _infoPanel(),
               ),
 
-            // Toolbar
+            // ── Toolbar ──────────────────────────────────────────────────
             _toolbar(),
 
-            // Status toast
+            // ── Status toast ──────────────────────────────────────────────
             Consumer<VideoCallProvider>(
               builder: (context, provider, _) {
                 if (provider.statusMessage.isEmpty) return const SizedBox.shrink();

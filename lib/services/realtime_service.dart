@@ -312,6 +312,7 @@ class VideoCallEvent {
     required this.roomId,
     required this.channelName,
     required this.agoraToken,
+    required this.uid,
     required this.senderUsername,
     required this.senderDisplayName,
     required this.senderAvatar,
@@ -320,15 +321,22 @@ class VideoCallEvent {
   final int roomId;
   final String channelName;
   final String agoraToken;
+  final int uid;
   final String senderUsername;
   final String senderDisplayName;
   final String senderAvatar;
 
   factory VideoCallEvent.fromJson(Map<String, dynamic> json) {
+    int parseIntField(dynamic value) {
+      if (value is int) return value;
+      return int.tryParse(value?.toString() ?? '') ?? 0;
+    }
+
     return VideoCallEvent(
-      roomId: json['roomId'] is int ? json['roomId'] : int.parse(json['roomId'].toString()),
+      roomId: parseIntField(json['roomId']),
       channelName: json['channelName']?.toString() ?? '',
       agoraToken: json['agoraToken']?.toString() ?? '',
+      uid: parseIntField(json['uid']),
       senderUsername: json['senderUsername']?.toString() ?? '',
       senderDisplayName: json['senderDisplayName']?.toString() ?? '',
       senderAvatar: json['senderAvatar']?.toString() ?? '',

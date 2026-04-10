@@ -168,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 await provider.initializeCall(
                                   event.channelName,
                                   token: event.agoraToken,
-                                  uid: 0,
+                                  uid: event.uid,
                                 );
 
                                 if (!mounted) return;

@@ -15,6 +15,8 @@ class VideoCallProvider with ChangeNotifier {
   String _statusMessage = '';
   bool _isLoading = false;
 
+  final Set<int> _videoActiveUsers = {};
+
   // Getters
   String get channelName => _channelName;
   bool get isInitialized => _isInitialized;
@@ -24,6 +26,8 @@ class VideoCallProvider with ChangeNotifier {
   String get statusMessage => _statusMessage;
   bool get isLoading => _isLoading;
   AgoraService get agoraService => _agoraService;
+
+  bool isRemoteVideoActive(int uid) => _videoActiveUsers.contains(uid);
 
   VideoCallProvider() {
     _agoraService = AgoraService();
@@ -39,6 +43,8 @@ class VideoCallProvider with ChangeNotifier {
 
     _agoraService.onUserOffline = () {
       _remoteUsers = List.from(_agoraService.remoteUsers);
+      // Remove any tracking for offline users
+      _videoActiveUsers.removeWhere((uid) => !_remoteUsers.contains(uid));
       notifyListeners();
     };
 
@@ -47,8 +53,22 @@ class VideoCallProvider with ChangeNotifier {
       notifyListeners();
     };
 
-    _agoraService.onRemoteVideoFrame = () {
+    _agoraService.onFirstRemoteVideoFrame = (uid) {
+      _videoActiveUsers.add(uid);
       notifyListeners();
+    };
+
+    _agoraService.onUserMuteVideo = (uid, muted) {
+      if (muted) {
+        _videoActiveUsers.remove(uid);
+      } else {
+        _videoActiveUsers.add(uid);
+      }
+      notifyListeners();
+    };
+
+    _agoraService.onRemoteVideoFrame = (uid) {
+      // Optional compatibility handler
     };
 
     _agoraService.onInfo = (msg) {

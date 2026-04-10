@@ -1,6 +1,7 @@
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class AgoraService {
   late RtcEngine _agoraRtcEngine;
@@ -14,7 +15,9 @@ class AgoraService {
   VoidCallback? onUserJoined;
   VoidCallback? onUserOffline;
   VoidCallback? onLocalUserJoined;
-  VoidCallback? onRemoteVideoFrame;
+  Function(int)? onRemoteVideoFrame;
+  Function(int)? onFirstRemoteVideoFrame;
+  Function(int, bool)? onUserMuteVideo;
   Function(String)? onError;
   Function(String)? onInfo;
 
@@ -30,6 +33,11 @@ class AgoraService {
     int uid = 0,
   }) async {
     try {
+      // Request permissions before doing anything
+      if (!kIsWeb) {
+        await [Permission.camera, Permission.microphone].request();
+      }
+
       _agoraRtcEngine = createAgoraRtcEngine();
 
       // Initialize engine
@@ -37,31 +45,44 @@ class AgoraService {
 
       // Enable video
       await _agoraRtcEngine.enableVideo();
-      await _agoraRtcEngine.startPreview();
+
+      // Enable audio
+      await _agoraRtcEngine.enableAudio();
+
+      // Enable web SDK interoperability (native side must call this to
+      // communicate with Flutter Web / Agora Web SDK users)
+      if (!kIsWeb) {
+        await _agoraRtcEngine.enableWebSdkInteroperability(true);
+      }
 
       // Set video configuration
       await _agoraRtcEngine.setVideoEncoderConfiguration(
         const VideoEncoderConfiguration(
-          dimensions: VideoDimensions(width: 1920, height: 1080),
-          frameRate: 30,
-          bitrate: 3150,
+          dimensions: VideoDimensions(width: 640, height: 480),
+          frameRate: 15,
+          bitrate: 800,
         ),
       );
 
       // Register event handlers
       _registerEventHandlers();
 
-      // Enable web SDK interoperability
-      if (!kIsWeb) {
-        await _agoraRtcEngine.enableWebSdkInteroperability(true);
-      }
+      // Start camera preview
+      await _agoraRtcEngine.startPreview();
 
-      // Join channel
+      // Join channel with explicit publish flags
       await _agoraRtcEngine.joinChannel(
         token: token ?? '',
         channelId: channelName,
         uid: uid,
-        options: const ChannelMediaOptions(),
+        options: const ChannelMediaOptions(
+          channelProfile: ChannelProfileType.channelProfileCommunication,
+          clientRoleType: ClientRoleType.clientRoleBroadcaster,
+          publishCameraTrack: true,
+          publishMicrophoneTrack: true,
+          autoSubscribeAudio: true,
+          autoSubscribeVideo: true,
+        ),
       );
 
       _logInfo('Initializing Agora for channel: $channelName');
@@ -101,7 +122,12 @@ class AgoraService {
           _logInfo(
             'First remote video frame from UID: $remoteUid ($width x $height)',
           );
-          onRemoteVideoFrame?.call();
+          onFirstRemoteVideoFrame?.call(remoteUid);
+          onRemoteVideoFrame?.call(remoteUid); // Keep for compatibility if needed
+        },
+        onUserMuteVideo: (RtcConnection connection, int remoteUid, bool muted) {
+          _logInfo('Remote user $remoteUid muted video: $muted');
+          onUserMuteVideo?.call(remoteUid, muted);
         },
       ),
     );
