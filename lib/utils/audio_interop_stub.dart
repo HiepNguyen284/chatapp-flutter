@@ -1,0 +1,2 @@
+void playWebRingtone() {}
+void stopWebRingtone() {}

@@ -1,6 +1,5 @@
 import 'dart:async';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:js' as js;
+import '../../utils/audio_interop_stub.dart' if (dart.library.js) '../../utils/audio_interop_web.dart';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -219,15 +218,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _playRingtone() {
-    try {
-      js.context.callMethod('playRingtone', ['assets/lib/assets/facebook_call.mp3']);
-    } catch (_) {}
+    playWebRingtone();
   }
 
   void _stopRingtone() {
-    try {
-      js.context.callMethod('stopRingtone', []);
-    } catch (_) {}
+    stopWebRingtone();
   }
 
 
