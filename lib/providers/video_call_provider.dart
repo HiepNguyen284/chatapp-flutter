@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../core/agora_config.dart';
 import '../services/agora_service.dart';
@@ -83,7 +82,8 @@ class VideoCallProvider with ChangeNotifier {
   }
 
   /// Initialize the video call
-  Future<void> initializeCall(String channelName, {String? token, int uid = 0}) async {
+  Future<void> initializeCall(String channelName,
+      {String? token, int uid = 0}) async {
     if (channelName.isEmpty) {
       _statusMessage = 'Channel name cannot be empty';
       notifyListeners();
@@ -92,6 +92,10 @@ class VideoCallProvider with ChangeNotifier {
 
     _isLoading = true;
     _channelName = channelName;
+    _remoteUsers.clear();
+    _videoActiveUsers.clear();
+    _isMuted = false;
+    _isCameraOff = false;
     _statusMessage = 'Initializing video call...';
     notifyListeners();
 
@@ -163,6 +167,7 @@ class VideoCallProvider with ChangeNotifier {
       await _agoraService.leaveChannel();
       _isInitialized = false;
       _remoteUsers.clear();
+      _videoActiveUsers.clear();
       _isMuted = false;
       _isCameraOff = false;
       _statusMessage = 'Call ended';

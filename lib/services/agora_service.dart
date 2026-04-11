@@ -1,10 +1,10 @@
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class AgoraService {
   late RtcEngine _agoraRtcEngine;
+  bool _engineCreated = false;
 
   final remoteUsers = <int>[];
   final infoStrings = <String>[];
@@ -33,12 +33,16 @@ class AgoraService {
     int uid = 0,
   }) async {
     try {
+      await _disposeEngineIfCreated();
+      _resetCallState();
+
       // Request permissions before doing anything
       if (!kIsWeb) {
         await [Permission.camera, Permission.microphone].request();
       }
 
       _agoraRtcEngine = createAgoraRtcEngine();
+      _engineCreated = true;
 
       // Initialize engine
       await _agoraRtcEngine.initialize(RtcEngineContext(appId: appId));
@@ -104,7 +108,9 @@ class AgoraService {
         },
         onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
           _logInfo('Remote user joined: $remoteUid');
-          remoteUsers.add(remoteUid);
+          if (!remoteUsers.contains(remoteUid)) {
+            remoteUsers.add(remoteUid);
+          }
           onUserJoined?.call();
         },
         onUserOffline: (RtcConnection connection, int remoteUid,
@@ -123,7 +129,8 @@ class AgoraService {
             'First remote video frame from UID: $remoteUid ($width x $height)',
           );
           onFirstRemoteVideoFrame?.call(remoteUid);
-          onRemoteVideoFrame?.call(remoteUid); // Keep for compatibility if needed
+          onRemoteVideoFrame
+              ?.call(remoteUid); // Keep for compatibility if needed
         },
         onUserMuteVideo: (RtcConnection connection, int remoteUid, bool muted) {
           _logInfo('Remote user $remoteUid muted video: $muted');
@@ -135,10 +142,14 @@ class AgoraService {
 
   /// Leave the channel
   Future<void> leaveChannel() async {
+    if (!_engineCreated) {
+      _resetCallState();
+      return;
+    }
+
     try {
       await _agoraRtcEngine.leaveChannel();
-      remoteUsers.clear();
-      infoStrings.clear();
+      _resetCallState();
       _logInfo('Left channel');
     } catch (e) {
       _logError('Error leaving channel: $e');
@@ -180,14 +191,35 @@ class AgoraService {
   /// Dispose the Agora engine
   Future<void> dispose() async {
     try {
-      await leaveChannel();
-      await _agoraRtcEngine.release();
-      remoteUsers.clear();
-      infoStrings.clear();
+      await _disposeEngineIfCreated();
+      _resetCallState();
       _logInfo('Agora engine disposed');
     } catch (e) {
       _logError('Error disposing Agora: $e');
     }
+  }
+
+  Future<void> _disposeEngineIfCreated() async {
+    if (!_engineCreated) {
+      return;
+    }
+
+    try {
+      await _agoraRtcEngine.leaveChannel();
+    } catch (_) {}
+
+    try {
+      await _agoraRtcEngine.release();
+    } catch (_) {}
+
+    _engineCreated = false;
+  }
+
+  void _resetCallState() {
+    remoteUsers.clear();
+    infoStrings.clear();
+    _isMuted = false;
+    _isCameraOff = false;
   }
 
   /// Log info message
